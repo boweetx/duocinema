@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- MQTT WebSocket клиент для мгновенной синхронизации -->
+    <!-- MQTT WebSocket клиент -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         :root {
@@ -45,7 +45,6 @@
             overflow-x: hidden;
         }
 
-        /* Общий фоновый градиент комнаты */
         .ambient-background-glow {
             position: fixed;
             top: 15%;
@@ -129,7 +128,7 @@
             color: #fff;
             font-size: 13px;
             font-weight: 600;
-            width: 100px;
+            width: 110px;
             text-transform: uppercase;
         }
 
@@ -194,6 +193,12 @@
             opacity: 0.9;
         }
 
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: none;
+            color: white;
+        }
+
         main {
             position: relative;
             z-index: 1;
@@ -213,18 +218,24 @@
             }
         }
 
-        /* Видео-контейнер и Ambilight */
         .video-wrapper {
             display: flex;
             flex-direction: column;
             gap: 14px;
         }
 
+        /* Выбор источников */
         .source-selector {
             background: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .source-input-row {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
@@ -232,18 +243,32 @@
 
         .source-selector input[type="text"] {
             flex: 1;
-            min-width: 220px;
+            min-width: 250px;
             background: var(--bg-elevated);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 8px 12px;
+            padding: 9px 14px;
             color: #fff;
             outline: none;
             font-size: 13px;
         }
 
+        .source-selector input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
         .source-selector input[type="file"] {
             display: none;
+        }
+
+        .source-hints {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .screen-outer {
@@ -254,7 +279,6 @@
             justify-content: center;
         }
 
-        /* Слой подсветки Ambilight вокруг экрана */
         .ambilight-halo {
             position: absolute;
             inset: -20px;
@@ -292,12 +316,45 @@
             justify-content: center;
         }
 
-        video {
+        video, iframe {
             width: 100%;
             height: 100%;
             object-fit: contain;
+            border: none;
             display: block;
             background: #000;
+        }
+
+        /* Таймер синхронного старта 3-2-1 */
+        .countdown-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 55;
+            color: #fff;
+        }
+
+        .countdown-overlay.active {
+            display: flex;
+        }
+
+        .countdown-number {
+            font-size: 90px;
+            font-weight: 800;
+            color: var(--primary);
+            animation: zoomPulse 0.9s ease-out infinite;
+            text-shadow: 0 0 30px var(--primary-glow);
+        }
+
+        @keyframes zoomPulse {
+            0% { transform: scale(0.6); opacity: 0.5; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
         }
 
         /* Интерактив для пары */
@@ -353,7 +410,6 @@
             100% { transform: translateY(-260px) scale(1); opacity: 0; }
         }
 
-        /* Окно объятия поверх экрана */
         .hug-overlay {
             position: absolute;
             inset: 0;
@@ -482,7 +538,6 @@
 </head>
 <body>
 
-    <!-- Фоновое общее свечение -->
     <div class="ambient-background-glow" id="ambientBg"></div>
 
     <header>
@@ -495,15 +550,16 @@
         </div>
 
         <div class="header-actions">
-            <!-- Кнопка переключения подсветки -->
+            <!-- Переключатель Ambilight -->
             <button class="btn" id="ambientToggleBtn" onclick="cycleAmbientMode()">
                 <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--primary);"></i>
                 <span id="ambientModeLabel">Подсветка: Динамическая</span>
             </button>
 
+            <!-- Комната -->
             <div class="room-bar">
                 <span>Комната:</span>
-                <input type="text" id="roomInput" value="LOVE-01">
+                <input type="text" id="roomInput" value="">
                 <button class="btn btn-primary" onclick="changeRoom()"><i class="fa-solid fa-right-to-bracket"></i> Войти</button>
                 <button class="btn" onclick="copyInviteLink()"><i class="fa-solid fa-copy"></i> Ссылка</button>
             </div>
@@ -517,29 +573,49 @@
 
     <main>
         <div class="video-wrapper">
-            <!-- Выбор источника -->
+            <!-- Выбор источника видео -->
             <div class="source-selector">
-                <input type="text" id="videoUrlInput" placeholder="Вставьте прямую ссылку (.mp4) или поток..." value="https://vjs.zencdn.net/v/oceans.mp4">
-                <button class="btn btn-primary" onclick="applyVideoUrl()"><i class="fa-solid fa-play"></i> Включить у обоих</button>
-                
-                <label class="btn" for="filePicker">
-                    <i class="fa-solid fa-folder-open"></i> Локальный файл с ПК
-                </label>
-                <input type="file" id="filePicker" accept="video/*" onchange="loadLocalFile(event)">
+                <div class="source-input-row">
+                    <input type="text" id="videoUrlInput" placeholder="Ссылка на VK Видео, Rutube, код iframe или прямая .mp4..." value="https://vjs.zencdn.net/v/oceans.mp4">
+                    <button class="btn btn-primary" onclick="applyVideoUrl()"><i class="fa-solid fa-play"></i> Включить у обоих</button>
+                    
+                    <button class="btn btn-warning" onclick="triggerCountdown()" title="Синхронный старт для VK и внешних плееров">
+                        <i class="fa-solid fa-stopwatch"></i> ⏱️ Отсчёт 3-2-1
+                    </button>
+
+                    <label class="btn" for="filePicker">
+                        <i class="fa-solid fa-folder-open"></i> Локальный файл
+                    </label>
+                    <input type="file" id="filePicker" accept="video/*" onchange="loadLocalFile(event)">
+                </div>
+                <div class="source-hints">
+                    <span>💡 Поддерживаются: ссылки на VK Видео / Rutube, коды &lt;iframe&gt;, прямые видеофайлы (.mp4) и файлы с диска.</span>
+                    <span id="playerTypeLabel" style="color: var(--primary); font-weight: 600;">Плеер: MP4 / Файл</span>
+                </div>
             </div>
 
-            <!-- Экран видео с сиянием Ambilight -->
+            <!-- Экран плеера с подсветкой -->
             <div class="screen-outer">
-                <!-- Ореол Ambilight за экраном -->
                 <div class="ambilight-halo" id="ambilightHalo">
                     <canvas id="ambilightCanvas" width="32" height="18"></canvas>
                 </div>
 
                 <div class="screen-container" id="screenBox">
+                    <!-- HTML5 видеоплеер -->
                     <video id="player" controls crossorigin="anonymous" playsinline>
                         <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
                     </video>
 
+                    <!-- Iframe для VK Видео / Rutube / Kodik -->
+                    <iframe id="externalFrame" style="display: none;" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>
+
+                    <!-- Оверлей синхронного отсчета 3-2-1 -->
+                    <div class="countdown-overlay" id="countdownOverlay">
+                        <div style="font-size: 16px; margin-bottom: 12px; color: var(--text-muted);">Приготовьтесь нажать PLAY в плеере!</div>
+                        <div class="countdown-number" id="countdownNumber">3</div>
+                    </div>
+
+                    <!-- Оверлей объятия -->
                     <div class="hug-overlay" id="hugOverlay">
                         <div class="hug-box">
                             <div style="font-size: 48px; margin-bottom: 8px;">💞</div>
@@ -564,14 +640,14 @@
             </div>
         </div>
 
-        <!-- Чат -->
+        <!-- Боковой чат -->
         <div class="chat-container">
             <div class="chat-header">
                 <h3><i class="fa-solid fa-comments"></i> Чат для двоих</h3>
                 <span style="font-size: 11px; color: var(--text-muted);" id="userNameDisplay">Вы: Я</span>
             </div>
             <div class="messages" id="messageList">
-                <div class="msg system">Добро пожаловать в кинозал! Паузы, перемотки и чат синхронизированы в реальном времени.</div>
+                <div class="msg system">Добро пожаловать в кинозал! Комната приватная, все действия синхронизируются.</div>
             </div>
             <div class="chat-input-bar">
                 <input type="text" id="chatInput" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter') sendChatMessage()">
@@ -581,9 +657,24 @@
     </main>
 
     <script>
-        // Инициализация комнаты и ролей
+        // --- 1. РАНДОМАЙЗЕР КОМНАТ ПРИ КАЖДОМ ВХОДЕ ---
         const urlParams = new URLSearchParams(window.location.search);
-        let currentRoom = (urlParams.get('room') || 'LOVE-01').toUpperCase();
+        let currentRoom = urlParams.get('room');
+
+        if (!currentRoom) {
+            // Если ссылки на комнату не было — генерируем уникальную
+            const prefixes = ['LOVE', 'DATE', 'DUO', 'NIGHT', 'SWEET'];
+            const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const randomNum = Math.floor(100 + Math.random() * 900);
+            currentRoom = `${randomPrefix}-${randomNum}`;
+            
+            // Мягко обновляем URL в браузере без перезагрузки
+            const newUrl = `${window.location.pathname}?room=${currentRoom}`;
+            window.history.replaceState({}, '', newUrl);
+        } else {
+            currentRoom = currentRoom.toUpperCase();
+        }
+
         document.getElementById('roomInput').value = currentRoom;
 
         const clientId = 'user_' + Math.random().toString(36).substring(2, 9);
@@ -591,6 +682,8 @@
         document.getElementById('userNameDisplay').textContent = `Вы: ${myName}`;
 
         const video = document.getElementById('player');
+        const iframe = document.getElementById('externalFrame');
+        const playerTypeLabel = document.getElementById('playerTypeLabel');
         const messageList = document.getElementById('messageList');
         const statusBadge = document.getElementById('statusBadge');
         const statusDot = document.getElementById('statusDot');
@@ -598,8 +691,9 @@
 
         let isIncomingSync = false;
         let mqttClient = null;
+        let activePlayerMode = 'video'; // 'video' или 'iframe'
 
-        // --- ЛОГИКА AMBILIGHT (ПОДСВЕТКИ) ---
+        // --- 2. AMBILIGHT (ПОДСВЕТКА) ---
         const ambilightCanvas = document.getElementById('ambilightCanvas');
         const ambilightCtx = ambilightCanvas.getContext('2d', { willReadFrequently: true });
         const ambilightHalo = document.getElementById('ambilightHalo');
@@ -607,7 +701,7 @@
         const ambientModeLabel = document.getElementById('ambientModeLabel');
 
         const ambientModes = ['dynamic', 'romantic', 'neon', 'off'];
-        let currentAmbientModeIndex = 0; // 0: Динамический Ambilight, 1: Романтика, 2: Неон, 3: Выкл
+        let currentAmbientModeIndex = 0;
 
         function cycleAmbientMode() {
             currentAmbientModeIndex = (currentAmbientModeIndex + 1) % ambientModes.length;
@@ -634,25 +728,25 @@
             }
         }
 
-        // Цикл захвата цвета с видео
         function renderAmbilight() {
-            if (ambientModes[currentAmbientModeIndex] === 'dynamic' && !video.paused && !video.ended && video.readyState >= 2) {
+            if (activePlayerMode === 'video' && ambientModes[currentAmbientModeIndex] === 'dynamic' && !video.paused && !video.ended && video.readyState >= 2) {
                 try {
                     ambilightCtx.drawImage(video, 0, 0, 32, 18);
-                    // Получаем средний оттенок из центра для фонового свечения комнаты
                     const pixel = ambilightCtx.getImageData(16, 9, 1, 1).data;
                     const color = `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, 0.4)`;
                     ambientBg.style.background = `radial-gradient(circle, ${color} 0%, rgba(20, 18, 33, 0.1) 70%, transparent 85%)`;
                 } catch (e) {
-                    // Если стороннее видео без CORS — используем плавный фолбэк
                     ambilightHalo.style.background = 'radial-gradient(circle, rgba(255, 77, 109, 0.5) 0%, rgba(123, 44, 191, 0.3) 70%)';
                 }
+            } else if (activePlayerMode === 'iframe' && ambientModes[currentAmbientModeIndex] === 'dynamic') {
+                // Для Iframe внешних плееров включаем мягкое сияние
+                ambilightHalo.style.background = 'radial-gradient(circle, rgba(255, 77, 109, 0.55) 0%, rgba(123, 44, 191, 0.35) 70%)';
             }
             requestAnimationFrame(renderAmbilight);
         }
         renderAmbilight();
 
-        // --- ПОДКЛЮЧЕНИЕ MQTT И СИНХРОНИЗАЦИЯ ---
+        // --- 3. СЕТЬ И СИНХРОНИЗАЦИЯ (MQTT) ---
         function initSync() {
             if (mqttClient) mqttClient.end();
 
@@ -676,7 +770,7 @@
                 statusText.textContent = `В сети: ${currentRoom}`;
 
                 mqttClient.subscribe(topic, { qos: 0 });
-                publish({ type: 'presence', text: `${myName} подключился(лась)` });
+                publish({ type: 'presence', text: `${myName} вошёл(ла) в комнату` });
             });
 
             mqttClient.on('message', (t, payload) => {
@@ -707,38 +801,45 @@
         function handleIncomingSignal(data) {
             switch (data.type) {
                 case 'play':
-                    isIncomingSync = true;
-                    if (Math.abs(video.currentTime - data.currentTime) > 1.2) {
-                        video.currentTime = data.currentTime;
+                    if (activePlayerMode === 'video') {
+                        isIncomingSync = true;
+                        if (Math.abs(video.currentTime - data.currentTime) > 1.2) {
+                            video.currentTime = data.currentTime;
+                        }
+                        video.play().finally(() => { isIncomingSync = false; });
                     }
-                    video.play().finally(() => { isIncomingSync = false; });
                     addSystemMessage(`${data.senderName} нажал(а) Play`);
                     break;
 
                 case 'pause':
-                    isIncomingSync = true;
-                    video.pause();
-                    if (Math.abs(video.currentTime - data.currentTime) > 1.2) {
-                        video.currentTime = data.currentTime;
+                    if (activePlayerMode === 'video') {
+                        isIncomingSync = true;
+                        video.pause();
+                        if (Math.abs(video.currentTime - data.currentTime) > 1.2) {
+                            video.currentTime = data.currentTime;
+                        }
+                        setTimeout(() => { isIncomingSync = false; }, 200);
                     }
-                    setTimeout(() => { isIncomingSync = false; }, 200);
                     addSystemMessage(`${data.senderName} нажал(а) Паузу (${formatTime(data.currentTime)})`);
                     break;
 
                 case 'seek':
-                    isIncomingSync = true;
-                    video.currentTime = data.currentTime;
-                    setTimeout(() => { isIncomingSync = false; }, 200);
+                    if (activePlayerMode === 'video') {
+                        isIncomingSync = true;
+                        video.currentTime = data.currentTime;
+                        setTimeout(() => { isIncomingSync = false; }, 200);
+                    }
                     addSystemMessage(`${data.senderName} перемотал(а) на ${formatTime(data.currentTime)}`);
                     break;
 
                 case 'change_source':
-                    isIncomingSync = true;
-                    video.src = data.url;
-                    video.load();
-                    document.getElementById('videoUrlInput').value = data.url;
+                    setPlayerSource(data.source, data.mode);
+                    document.getElementById('videoUrlInput').value = data.source;
                     addSystemMessage(`${data.senderName} сменил(а) видео`);
-                    setTimeout(() => { isIncomingSync = false; }, 300);
+                    break;
+
+                case 'countdown':
+                    runCountdownUI(data.senderName);
                     break;
 
                 case 'chat':
@@ -759,42 +860,131 @@
             }
         }
 
-        // События видеоплеера
-        video.addEventListener('play', () => {
-            if (isIncomingSync) return;
-            publish({ type: 'play', currentTime: video.currentTime });
-        });
+        // --- 4. УМНАЯ СМЕНА ИСТОЧНИКА (VK, IFRAME, MP4) ---
+        function parseVideoInput(input) {
+            input = input.trim();
+            // Если пользователь вставил целый код <iframe src="...">
+            if (input.includes('<iframe') && input.includes('src=')) {
+                const match = input.match(/src=["']([^"']+)["']/);
+                if (match && match[1]) {
+                    return { url: match[1], mode: 'iframe' };
+                }
+            }
+            
+            // Если ссылка на VK Видео (vk.com/video... или vkvideo.ru/video...)
+            if (input.includes('vk.com/video') || input.includes('vkvideo.ru/video')) {
+                // Если это уже embed-ссылка
+                if (input.includes('video_ext.php')) {
+                    return { url: input, mode: 'iframe' };
+                }
+                // Извлекаем oid и id видео: video-12345_67890
+                const match = input.match(/video(-?\d+)_(\d+)/);
+                if (match) {
+                    return {
+                        url: `https://vk.com/video_ext.php?oid=${match[1]}&id=${match[2]}&hd=2`,
+                        mode: 'iframe'
+                    };
+                }
+                return { url: input, mode: 'iframe' };
+            }
 
-        video.addEventListener('pause', () => {
-            if (isIncomingSync) return;
-            publish({ type: 'pause', currentTime: video.currentTime });
-        });
+            // Rutube, YouTube, Kodik или сторонний плеер
+            if (input.includes('rutube.ru') || input.includes('youtube.com') || input.includes('youtu.be') || input.includes('kodik') || input.includes('embed')) {
+                let cleanUrl = input;
+                if (input.includes('youtube.com/watch?v=')) {
+                    cleanUrl = input.replace('watch?v=', 'embed/');
+                } else if (input.includes('youtu.be/')) {
+                    cleanUrl = input.replace('youtu.be/', 'youtube.com/embed/');
+                } else if (input.includes('rutube.ru/video/')) {
+                    cleanUrl = input.replace('/video/', '/play/embed/');
+                }
+                return { url: cleanUrl, mode: 'iframe' };
+            }
 
-        video.addEventListener('seeked', () => {
-            if (isIncomingSync) return;
-            publish({ type: 'seek', currentTime: video.currentTime });
-        });
+            // Иначе считаем это прямой ссылкой на .mp4
+            return { url: input, mode: 'video' };
+        }
+
+        function setPlayerSource(sourceUrl, mode) {
+            activePlayerMode = mode;
+            if (mode === 'iframe') {
+                video.pause();
+                video.style.display = 'none';
+                iframe.style.display = 'block';
+                iframe.src = sourceUrl;
+                playerTypeLabel.textContent = 'Плеер: VK / Внешний Iframe';
+            } else {
+                iframe.style.display = 'none';
+                iframe.src = 'about:blank';
+                video.style.display = 'block';
+                video.src = sourceUrl;
+                video.load();
+                video.play().catch(() => {});
+                playerTypeLabel.textContent = 'Плеер: MP4 / Файл';
+            }
+        }
 
         function applyVideoUrl() {
-            const url = document.getElementById('videoUrlInput').value.trim();
-            if (!url) return;
-            video.src = url;
-            video.load();
-            video.play();
-            publish({ type: 'change_source', url: url });
+            const raw = document.getElementById('videoUrlInput').value;
+            if (!raw) return;
+            const parsed = parseVideoInput(raw);
+            setPlayerSource(parsed.url, parsed.mode);
+            publish({ type: 'change_source', source: parsed.url, mode: parsed.mode });
         }
 
         function loadLocalFile(event) {
             const file = event.target.files[0];
             if (!file) return;
             const fileUrl = URL.createObjectURL(file);
-            video.src = fileUrl;
-            video.load();
-            video.play();
-            addSystemMessage(`Загружен файл: ${file.name}. Убедитесь, что второй человек выбрал этот же файл!`);
+            setPlayerSource(fileUrl, 'video');
+            addSystemMessage(`Загружен файл: ${file.name}. Вторая половинка должна выбрать этот же файл у себя!`);
         }
 
-        // Чат
+        // --- 5. СИНХРОННЫЙ ОТСЧЕТ 3-2-1 ДЛЯ VK ВИДЕО ---
+        function triggerCountdown() {
+            runCountdownUI('Вы');
+            publish({ type: 'countdown' });
+        }
+
+        function runCountdownUI(initiator) {
+            const overlay = document.getElementById('countdownOverlay');
+            const num = document.getElementById('countdownNumber');
+            overlay.classList.add('active');
+
+            let count = 3;
+            num.textContent = count;
+            addSystemMessage(`⏱️ ${initiator} запустил(а) отсчёт 3-2-1 для одновременного старта!`);
+
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    num.textContent = count;
+                } else if (count === 0) {
+                    num.textContent = 'СТАРТ! ▶️';
+                } else {
+                    clearInterval(interval);
+                    overlay.classList.remove('active');
+                }
+            }, 1000);
+        }
+
+        // --- 6. СОБЫТИЯ MP4 ПЛЕЕРА ---
+        video.addEventListener('play', () => {
+            if (isIncomingSync || activePlayerMode !== 'video') return;
+            publish({ type: 'play', currentTime: video.currentTime });
+        });
+
+        video.addEventListener('pause', () => {
+            if (isIncomingSync || activePlayerMode !== 'video') return;
+            publish({ type: 'pause', currentTime: video.currentTime });
+        });
+
+        video.addEventListener('seeked', () => {
+            if (isIncomingSync || activePlayerMode !== 'video') return;
+            publish({ type: 'seek', currentTime: video.currentTime });
+        });
+
+        // --- 7. ЧАТ, РЕАКЦИИ И ОБЪЯТИЯ ---
         function sendChatMessage() {
             const input = document.getElementById('chatInput');
             const text = input.value.trim();
@@ -820,7 +1010,6 @@
             messageList.scrollTop = messageList.scrollHeight;
         }
 
-        // Эмодзи и анимация объятия
         function sendReaction(emoji) {
             renderFlyingEmoji(emoji);
             publish({ type: 'reaction', emoji: emoji });
@@ -847,7 +1036,6 @@
             setTimeout(() => overlay.classList.remove('active'), 3000);
         }
 
-        // Комнаты
         function changeRoom() {
             const val = document.getElementById('roomInput').value.trim().toUpperCase();
             if (!val || val === currentRoom) return;
@@ -860,16 +1048,16 @@
         function copyInviteLink() {
             const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}&role=girl`;
             navigator.clipboard.writeText(inviteUrl);
-            alert(`Ссылка скопирована!\n\nОтправьте её девушке:\n${inviteUrl}`);
+            alert(`Ссылка скопирована!\n\nОтправьте её девушке, чтобы она зашла в вашу комнату:\n${inviteUrl}`);
         }
 
         function formatTime(sec) {
+            if (isNaN(sec)) return '0:00';
             const m = Math.floor(sec / 60);
             const s = Math.floor(sec % 60);
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
-        // Старт
         initSync();
     </script>
 </body>

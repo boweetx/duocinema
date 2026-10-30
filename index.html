@@ -1,1938 +1,776 @@
 <!DOCTYPE html>
-<html lang="ru" class="dark">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DuoCinema — Уютный кинозал для двоих</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts: Inter & Comfortaa -->
-    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- HLS.js for .m3u8 streams -->
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <!-- YouTube IFrame API -->
-    <script src="https://www.youtube.com/iframe_api"></script>
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        display: ['Comfortaa', 'cursive'],
-                    },
-                    colors: {
-                        velvet: {
-                            950: '#07060c',
-                            900: '#0b0914',
-                            800: '#131022',
-                            700: '#1d1833',
-                            600: '#2a2248',
-                        },
-                        rose: {
-                            400: '#fb7185',
-                            500: '#f43f5e',
-                            600: '#e11d48',
-                        },
-                        violet: {
-                            400: '#a78bfa',
-                            500: '#8b5cf6',
-                            600: '#7c3aed',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-
+    <title>DuoCinema — Кинозал для двоих</title>
+    <!-- Шрифты и иконки -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MQTT WebSocket клиент для мгновенной синхронизации без сервера -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
+        :root {
+            --bg-base: #0b0a12;
+            --bg-surface: #141221;
+            --bg-elevated: #1e1b30;
+            --primary: #ff4d6d;
+            --primary-hover: #ff758f;
+            --primary-glow: rgba(255, 77, 109, 0.35);
+            --secondary: #7b2cbf;
+            --text-main: #f8f9fa;
+            --text-muted: #9a94b8;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-active: rgba(255, 77, 109, 0.4);
+            --online-green: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
-            background-color: #0b0914;
-            color: #f3f4f6;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
             overflow-x: hidden;
         }
 
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: rgba(19, 16, 34, 0.6);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(139, 92, 246, 0.35);
-            border-radius: 9999px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(244, 63, 94, 0.6);
+        /* Фоновая динамическая подсветка */
+        .ambient-glow {
+            position: fixed;
+            top: 20%;
+            left: 30%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, var(--primary-glow) 0%, rgba(123, 44, 191, 0.15) 50%, transparent 70%);
+            filter: blur(80px);
+            z-index: 0;
+            pointer-events: none;
+            transition: all 0.5s ease;
         }
 
-        /* Glassmorphism Panels */
-        .glass-panel {
-            background: rgba(22, 18, 38, 0.72);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .glass-pill {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        /* Dynamic Ambilight Glow Behind Video */
-        .ambilight-wrapper {
+        header {
             position: relative;
             z-index: 10;
-        }
-        .ambilight-aura {
-            position: absolute;
-            inset: -25px;
-            border-radius: 28px;
-            filter: blur(55px);
-            opacity: 0.65;
-            z-index: -1;
-            transition: opacity 0.6s ease, background 1.2s ease;
-            pointer-events: none;
-            animation: ambilightPulse 9s ease-in-out infinite alternate;
-        }
-        @keyframes ambilightPulse {
-            0% { transform: scale(0.98); opacity: 0.55; }
-            50% { transform: scale(1.03); opacity: 0.78; }
-            100% { transform: scale(0.99); opacity: 0.62; }
+            background: rgba(20, 18, 33, 0.7);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
         }
 
-        /* Floating Reactions Animation */
-        @keyframes floatUpReaction {
-            0% {
-                transform: translateY(0) scale(0.5) rotate(0deg);
-                opacity: 0;
-            }
-            15% {
-                transform: translateY(-30px) scale(1.2) rotate(-8deg);
-                opacity: 1;
-            }
-            50% {
-                transform: translateY(-140px) scale(1.05) rotate(8deg);
-                opacity: 0.95;
-            }
-            100% {
-                transform: translateY(-290px) scale(0.8) rotate(-5deg);
-                opacity: 0;
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 4px 15px var(--primary-glow);
+        }
+
+        .brand-text h1 {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #fff, #ffccd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-text p {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .room-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-elevated);
+            padding: 6px 14px;
+            border-radius: 30px;
+            border: 1px solid var(--border);
+        }
+
+        .room-bar input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            width: 110px;
+            text-transform: uppercase;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--online-green);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--online-green);
+            box-shadow: 0 0 8px var(--online-green);
+        }
+
+        .status-dot.offline {
+            background-color: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+        }
+
+        .status-badge.offline {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        .btn {
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), #e63946);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 15px var(--primary-glow);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        main {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1700px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
             }
         }
-        .floating-emoji {
+
+        /* Видео-зона */
+        .video-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .source-selector {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .source-selector input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #fff;
+            outline: none;
+            font-size: 13px;
+        }
+
+        .source-selector input[type="file"] {
+            display: none;
+        }
+
+        .screen-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--border);
+            aspect-ratio: 16 / 9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Интерактив для пары */
+        .reaction-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .emojis {
+            display: flex;
+            gap: 8px;
+        }
+
+        .emoji-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            font-size: 18px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .emoji-btn:hover {
+            transform: scale(1.25);
+            background: rgba(255, 77, 109, 0.2);
+            border-color: var(--primary);
+        }
+
+        .flying-emoji {
             position: absolute;
-            bottom: 24px;
+            bottom: 20px;
+            font-size: 32px;
             pointer-events: none;
             z-index: 50;
-            animation: floatUpReaction 3.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-            filter: drop-shadow(0 6px 16px rgba(0,0,0,0.45));
+            animation: flyUp 2.5s ease-out forwards;
         }
 
-        /* Couple Hug / Kiss Burst Effect */
-        @keyframes loveWave {
-            0% { transform: scale(0.8); opacity: 0; }
-            25% { transform: scale(1.02); opacity: 1; }
-            80% { transform: scale(1.04); opacity: 1; }
-            100% { transform: scale(1.1); opacity: 0; }
-        }
-        .love-wave-banner {
-            animation: loveWave 3.6s ease-out forwards;
+        @keyframes flyUp {
+            0% { transform: translateY(0) scale(0.6); opacity: 1; }
+            50% { transform: translateY(-120px) scale(1.3); opacity: 0.9; }
+            100% { transform: translateY(-250px) scale(1); opacity: 0; }
         }
 
-        /* Theater Mode Dimming */
-        body.theater-active header,
-        body.theater-active .dim-on-theater {
-            opacity: 0.25;
+        /* Объятие поверх экрана */
+        .hug-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 77, 109, 0.25);
+            backdrop-filter: blur(4px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            opacity: 0;
+            pointer-events: none;
             transition: opacity 0.4s ease;
         }
-        body.theater-active header:hover,
-        body.theater-active .dim-on-theater:hover {
+
+        .hug-overlay.active {
             opacity: 1;
+            animation: hugPulse 3s ease forwards;
+        }
+
+        @keyframes hugPulse {
+            0% { opacity: 0; transform: scale(0.95); }
+            15% { opacity: 1; transform: scale(1); }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .hug-box {
+            background: var(--bg-surface);
+            border: 2px solid var(--primary);
+            border-radius: 20px;
+            padding: 20px 30px;
+            text-align: center;
+            box-shadow: 0 10px 40px var(--primary-glow);
+        }
+
+        /* Боковой чат */
+        .chat-container {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 120px);
+            min-height: 480px;
+        }
+
+        .chat-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h3 {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .msg {
+            max-width: 85%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .msg.me {
+            align-self: flex-end;
+            background: linear-gradient(135deg, var(--primary), #e63946);
+            color: #fff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg.partner {
+            align-self: flex-start;
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 2px;
+        }
+
+        .msg.system {
+            align-self: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 20px;
+            max-width: 100%;
+        }
+
+        .chat-input-bar {
+            padding: 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input-bar input {
+            flex: 1;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #fff;
+            outline: none;
+            font-size: 13px;
+        }
+
+        .chat-input-bar input:focus {
+            border-color: var(--primary);
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col selection:bg-rose-500 selection:text-white">
+<body>
 
-    <!-- Background Decorative Gradients -->
-    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div class="absolute -top-40 -left-40 w-96 h-96 bg-rose-600/10 rounded-full blur-[120px]"></div>
-        <div class="absolute top-1/3 -right-40 w-96 h-96 bg-violet-600/10 rounded-full blur-[130px]"></div>
-        <div class="absolute -bottom-40 left-1/3 w-96 h-96 bg-fuchsia-600/10 rounded-full blur-[140px]"></div>
-    </div>
+    <div class="ambient-glow" id="ambient"></div>
 
-    <!-- Top Navigation Bar -->
-    <header class="sticky top-0 z-30 glass-panel border-b border-white/10 px-3 sm:px-6 py-2.5 transition-opacity duration-300">
-        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
-            <!-- Brand Logo -->
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 via-fuchsia-500 to-violet-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
-                    <i class="fa-solid fa-heart text-white text-lg"></i>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="font-display font-bold text-lg sm:text-xl tracking-tight bg-gradient-to-r from-white via-rose-200 to-violet-200 bg-clip-text text-transparent">
-                            DuoCinema
-                        </span>
-                        <span id="connectionBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium flex items-center gap-1">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <span>Онлайн</span>
-                        </span>
-                    </div>
-                    <p class="text-[11px] text-gray-400 hidden sm:block">Личный кинозал для просмотра вдвоём</p>
-                </div>
+    <header>
+        <div class="brand">
+            <div class="brand-icon"><i class="fa-solid fa-heart"></i></div>
+            <div class="brand-text">
+                <h1>DuoCinema</h1>
+                <p>Личный кинозал для просмотра вдвоём</p>
             </div>
+        </div>
 
-            <!-- Room Controls & Presence -->
-            <div class="flex items-center flex-wrap gap-2 sm:gap-3">
-                <!-- Active Room Pill -->
-                <div class="glass-pill rounded-xl px-3 py-1.5 flex items-center gap-2">
-                    <span class="text-xs text-gray-400 hidden md:inline">Комната:</span>
-                    <span id="activeRoomCodeDisplay" class="font-mono font-bold text-sm text-rose-400 tracking-wider">LOVE-01</span>
-                    <button id="copyRoomBtn" title="Скопировать код комнаты" class="text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/15 px-2 py-1 rounded-lg transition flex items-center gap-1">
-                        <i class="fa-regular fa-copy"></i>
-                        <span class="hidden sm:inline">Код</span>
-                    </button>
-                    <button id="changeRoomBtn" title="Сменить или создать комнату" class="text-xs text-violet-300 hover:text-white bg-violet-500/15 hover:bg-violet-500/30 px-2 py-1 rounded-lg transition">
-                        <i class="fa-solid fa-door-open"></i>
-                    </button>
-                </div>
+        <div class="room-bar">
+            <span>Комната:</span>
+            <input type="text" id="roomInput" value="LOVE-01">
+            <button class="btn btn-primary" onclick="changeRoom()"><i class="fa-solid fa-right-to-bracket"></i> Войти</button>
+            <button class="btn" onclick="copyInviteLink()"><i class="fa-solid fa-copy"></i> Ссылка</button>
+        </div>
 
-                <!-- Partner Avatars / Presence -->
-                <div id="membersPresenceBar" class="glass-pill rounded-xl px-3 py-1.5 flex items-center gap-2">
-                    <!-- Rendered dynamically -->
-                </div>
-
-                <!-- Force Sync Now Button -->
-                <button id="forceSyncBtn" class="glass-pill hover:bg-rose-500/20 hover:border-rose-500/40 text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 text-rose-200 font-medium" title="Синхронизировать время и паузу у обоих">
-                    <i class="fa-solid fa-rotate"></i>
-                    <span class="hidden lg:inline">Синхронизировать</span>
-                </button>
-
-                <!-- Ambilight Toggle -->
-                <button id="ambilightToggleBtn" class="glass-pill hover:bg-white/10 text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 text-amber-300" title="Переключить атмосферную подсветку Ambilight">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    <span class="hidden xl:inline">Подсветка</span>
-                </button>
-
-                <!-- Theater Mode Toggle -->
-                <button id="theaterModeBtn" class="glass-pill hover:bg-white/10 text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 text-violet-300" title="Режим кинотеатра">
-                    <i class="fa-solid fa-expand"></i>
-                    <span class="hidden xl:inline">Кинозал</span>
-                </button>
-
-                <!-- User Profile Button -->
-                <button id="openProfileBtn" class="glass-pill hover:bg-white/15 px-2.5 py-1.5 rounded-xl transition flex items-center gap-2 border border-rose-500/30">
-                    <span id="myAvatarHeader" class="text-lg">🦊</span>
-                    <span id="myNameHeader" class="text-xs sm:text-sm font-medium text-white max-w-[90px] truncate">Загрузка...</span>
-                    <i class="fa-solid fa-pen text-[10px] text-gray-400"></i>
-                </button>
-            </div>
+        <div class="status-badge" id="statusBadge">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Подключение...</span>
         </div>
     </header>
 
-    <!-- Main Workspace -->
-    <main class="flex-1 relative z-10 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4 flex flex-col lg:flex-row gap-5">
-        
-        <!-- LEFT / CENTER COLUMN: Media Source Selector, Video Stage, Couple Reaction Bar -->
-        <section id="playerColumn" class="flex-1 flex flex-col gap-4 min-w-0 transition-all duration-300">
-            
-            <!-- Source Mode Tabs & URL Loader Bar -->
-            <div class="glass-panel rounded-2xl p-3 sm:p-4 flex flex-col gap-3 dim-on-theater">
-                <!-- 4 Tabs -->
-                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2.5">
-                    <div class="flex flex-wrap items-center gap-1.5">
-                        <button data-source-tab="direct" class="source-tab-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-2 bg-gradient-to-r from-rose-500 to-violet-600 text-white shadow-md">
-                            <i class="fa-solid fa-film"></i>
-                            <span>Прямая ссылка / HLS</span>
-                        </button>
-                        <button data-source-tab="youtube" class="source-tab-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-2 text-gray-300 hover:bg-white/10">
-                            <i class="fa-brands fa-youtube text-rose-400"></i>
-                            <span>YouTube</span>
-                        </button>
-                        <button data-source-tab="embed" class="source-tab-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-2 text-gray-300 hover:bg-white/10">
-                            <i class="fa-solid fa-code text-violet-400"></i>
-                            <span>Внешний плеер (VK / Kodik / Iframe)</span>
-                        </button>
-                        <button data-source-tab="local" class="source-tab-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-2 text-gray-300 hover:bg-white/10">
-                            <i class="fa-solid fa-folder-open text-amber-400"></i>
-                            <span>Локальный файл с ПК</span>
-                        </button>
-                    </div>
+    <main>
+        <div class="video-wrapper">
+            <!-- Выбор источника -->
+            <div class="source-selector">
+                <input type="text" id="videoUrlInput" placeholder="Вставьте прямую ссылку (.mp4) или ссылку на видео..." value="https://vjs.zencdn.net/v/oceans.mp4">
+                <button class="btn btn-primary" onclick="applyVideoUrl()"><i class="fa-solid fa-play"></i> Включить у обоих</button>
+                
+                <label class="btn" for="filePicker">
+                    <i class="fa-solid fa-folder-open"></i> Локальный файл с ПК
+                </label>
+                <input type="file" id="filePicker" accept="video/*" onchange="loadLocalFile(event)">
+            </div>
 
-                    <!-- Sync Status Indicator -->
-                    <div class="flex items-center gap-2 text-xs text-gray-400">
-                        <span id="syncStatusDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                        <span id="syncStatusText">Синхронизация активна</span>
-                    </div>
-                </div>
+            <!-- Экран видео -->
+            <div class="screen-container" id="screenBox">
+                <video id="player" controls crossorigin="anonymous" playsinline>
+                    <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
+                </video>
 
-                <!-- Tab 1: Direct Video / HLS Input -->
-                <div id="tabPanel-direct" class="source-tab-panel flex flex-col sm:flex-row gap-2">
-                    <div class="relative flex-1">
-                        <i class="fa-solid fa-link absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-                        <input id="directUrlInput" type="text" placeholder="Вставьте ссылку на .mp4, .webm или .m3u8 поток..." 
-                            class="w-full bg-velvet-900/90 border border-white/10 focus:border-rose-500 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-white placeholder-gray-500 outline-none transition">
-                    </div>
-                    <button id="loadDirectBtn" class="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 hover:from-rose-600 hover:to-violet-700 text-white font-medium text-xs sm:text-sm transition shadow-lg shadow-rose-500/20 whitespace-nowrap flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-play"></i>
-                        <span>Включить для обоих</span>
-                    </button>
-                    <!-- Quick Demo Movies Dropdown -->
-                    <select id="presetMoviesSelect" class="bg-velvet-800 border border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-200 outline-none cursor-pointer hover:border-violet-400 transition">
-                        <option value="">🎬 Готовые фильмы для теста...</option>
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4">Sintel (Фэнтези короткометражка)</option>
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4">Tears of Steel (Sci-Fi кино)</option>
-                        <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">Big Buck Bunny (Мультфильм)</option>
-                        <option value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8">HLS Поток (.m3u8 тест)</option>
-                    </select>
-                </div>
-
-                <!-- Tab 2: YouTube Input -->
-                <div id="tabPanel-youtube" class="source-tab-panel hidden flex-col sm:flex-row gap-2">
-                    <div class="relative flex-1">
-                        <i class="fa-brands fa-youtube absolute left-3.5 top-1/2 -translate-y-1/2 text-rose-500 text-sm"></i>
-                        <input id="youtubeUrlInput" type="text" placeholder="Вставьте ссылку на YouTube видео (например, https://www.youtube.com/watch?v=...)" 
-                            class="w-full bg-velvet-900/90 border border-white/10 focus:border-rose-500 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-white placeholder-gray-500 outline-none transition">
-                    </div>
-                    <button id="loadYoutubeBtn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs sm:text-sm transition shadow-lg shadow-rose-600/25 whitespace-nowrap flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-play"></i>
-                        <span>Запустить YouTube</span>
-                    </button>
-                </div>
-
-                <!-- Tab 3: Embed / Iframe Input (VK Video, Kodik, Kinescope, etc.) -->
-                <div id="tabPanel-embed" class="source-tab-panel hidden flex-col gap-2">
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <div class="relative flex-1">
-                            <i class="fa-solid fa-code absolute left-3.5 top-1/2 -translate-y-1/2 text-violet-400 text-xs"></i>
-                            <input id="embedUrlInput" type="text" placeholder="Вставьте код <iframe> или ссылку на плеер (VK Видео, Kodik, Rutube, Kinescope)..." 
-                                class="w-full bg-velvet-900/90 border border-white/10 focus:border-violet-500 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-white placeholder-gray-500 outline-none transition">
-                        </div>
-                        <button id="loadEmbedBtn" class="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium text-xs sm:text-sm transition whitespace-nowrap flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-tv"></i>
-                            <span>Открыть плеер у обоих</span>
-                        </button>
-                    </div>
-                    <div class="flex flex-wrap items-center justify-between gap-2 bg-violet-500/10 border border-violet-500/20 rounded-xl px-3 py-2 text-xs text-violet-200">
-                        <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-bolt text-amber-400"></i>
-                            <span>Для закрытых сторонних iframe используйте синхронный отсчёт «3-2-1 Старт!», чтобы нажать Play одновременно:</span>
-                        </div>
-                        <button id="startCountdownBtn" class="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-rose-500 text-white font-semibold hover:opacity-90 transition shadow">
-                            ⏱️ Отсчёт 3-2-1 Старт!
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Tab 4: Local File Sync -->
-                <div id="tabPanel-local" class="source-tab-panel hidden flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
-                    <div class="text-xs text-gray-300 space-y-1">
-                        <p class="font-semibold text-amber-300 flex items-center gap-1.5">
-                            <i class="fa-solid fa-hard-drive"></i>
-                            <span>Просмотр скачанного фильма в максимальном качестве без загрузки в сеть</span>
-                        </p>
-                        <p class="text-gray-400">Выберите один и тот же видеофайл (.mp4, .mkv, .webm) на своих устройствах. Пауза, перемотка и скорость будут синхронизироваться автоматически!</p>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 shrink-0">
-                        <label class="cursor-pointer px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-velvet-950 font-semibold text-xs sm:text-sm transition flex items-center gap-2 shadow-lg shadow-amber-500/20">
-                            <i class="fa-solid fa-file-video"></i>
-                            <span>Выбрать видеофайл</span>
-                            <input id="localVideoFileInput" type="file" accept="video/*,.mkv" class="hidden">
-                        </label>
-                        <label class="cursor-pointer px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-gray-200 text-xs transition flex items-center gap-1.5" title="Добавить субтитры .vtt или .srt">
-                            <i class="fa-solid fa-closed-captioning"></i>
-                            <span>Субтитры (.srt/.vtt)</span>
-                            <input id="localSubtitlesInput" type="file" accept=".vtt,.srt" class="hidden">
-                        </label>
+                <div class="hug-overlay" id="hugOverlay">
+                    <div class="hug-box">
+                        <div style="font-size: 48px; margin-bottom: 8px;">💞</div>
+                        <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">Крепкое объятие!</h2>
+                        <p style="font-size: 13px; color: var(--text-muted);" id="hugSenderText">Твоя половинка обнимает тебя</p>
                     </div>
                 </div>
             </div>
 
-            <!-- VIDEO STAGE WITH AMBILIGHT -->
-            <div class="ambilight-wrapper my-1">
-                <!-- Dynamic Ambilight Aura -->
-                <div id="ambilightAura" class="ambilight-aura bg-gradient-to-tr from-rose-600/60 via-violet-600/50 to-amber-500/50"></div>
-
-                <!-- Video Container -->
-                <div id="videoStageContainer" class="relative w-full aspect-video rounded-2xl overflow-hidden bg-velvet-950 border border-white/15 shadow-2xl flex items-center justify-center">
-                    
-                    <!-- 1. HTML5 Video Player (Used for Direct, HLS & Local File) -->
-                    <video id="mainHtml5Video" class="w-full h-full object-contain bg-black" controls playsinline crossorigin="anonymous">
-                        <track id="subtitleTrack" kind="subtitles" srclang="ru" label="Русские субтитры" default>
-                        Ваш браузер не поддерживает HTML5 видео.
-                    </video>
-
-                    <!-- 2. YouTube IFrame Container -->
-                    <div id="youtubeWrapper" class="hidden w-full h-full bg-black">
-                        <div id="youtubePlayerDiv" class="w-full h-full"></div>
-                    </div>
-
-                    <!-- 3. External Iframe Container -->
-                    <div id="embedWrapper" class="hidden w-full h-full bg-black">
-                        <iframe id="customEmbedIframe" class="w-full h-full border-0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture"></iframe>
-                    </div>
-
-                    <!-- Floating Reactions Overlay Layer -->
-                    <div id="floatingReactionsStage" class="absolute inset-0 pointer-events-none overflow-hidden z-30"></div>
-
-                    <!-- Couple Love Wave Overlay -->
-                    <div id="loveBannerOverlay" class="hidden absolute top-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
-                        <div class="love-wave-banner px-6 py-3 rounded-2xl bg-gradient-to-r from-rose-500/90 via-pink-500/90 to-violet-600/90 backdrop-blur-md text-white shadow-2xl border border-white/30 flex items-center gap-3">
-                            <span class="text-2xl animate-bounce">💞</span>
-                            <div>
-                                <p id="loveBannerTitle" class="font-display font-bold text-sm sm:text-base">Нежное объятие!</p>
-                                <p id="loveBannerSubtitle" class="text-xs text-rose-100">Твоя половинка скучает и обнимает тебя</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 3-2-1 Countdown Overlay for Iframe Manual Sync -->
-                    <div id="countdownOverlay" class="hidden absolute inset-0 bg-velvet-950/80 backdrop-blur-md z-40 flex flex-col items-center justify-center text-center p-6">
-                        <p class="text-sm uppercase tracking-widest text-violet-300 mb-2">Синхронный старт для внешнего плеера</p>
-                        <div id="countdownNumber" class="font-display font-bold text-7xl sm:text-8xl bg-gradient-to-br from-rose-400 to-amber-300 bg-clip-text text-transparent drop-shadow-lg my-2">
-                            3
-                        </div>
-                        <p class="text-sm text-gray-300">Приготовьтесь нажать <span class="text-white font-semibold">Play</span> одновременно!</p>
-                    </div>
-
-                    <!-- Subtle Sync Toast inside top-left of video -->
-                    <div id="videoSyncToast" class="opacity-0 transition-opacity duration-300 pointer-events-none absolute top-4 left-4 z-30 bg-velvet-900/85 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl text-xs text-gray-200 flex items-center gap-2 shadow-lg">
-                        <i class="fa-solid fa-tower-broadcast text-rose-400"></i>
-                        <span id="videoSyncToastText">Синхронизировано</span>
-                    </div>
+            <!-- Реакции и панель пары -->
+            <div class="reaction-bar">
+                <div class="emojis">
+                    <button class="emoji-btn" onclick="sendReaction('❤️')">❤️</button>
+                    <button class="emoji-btn" onclick="sendReaction('🥰')">🥰</button>
+                    <button class="emoji-btn" onclick="sendReaction('🍿')">🍿</button>
+                    <button class="emoji-btn" onclick="sendReaction('😂')">😂</button>
+                    <button class="emoji-btn" onclick="sendReaction('🥺')">🥺</button>
+                    <button class="emoji-btn" onclick="sendReaction('🔥')">🔥</button>
                 </div>
+                <button class="btn btn-primary" onclick="sendHug()"><i class="fa-solid fa-hand-holding-heart"></i> 💞 Обнять любимую</button>
             </div>
+        </div>
 
-            <!-- BOTTOM BAR: Couple Reactions, Playback Controls & Ambilight Mood -->
-            <div class="glass-panel rounded-2xl p-3 sm:px-5 flex flex-wrap items-center justify-between gap-3">
-                <!-- Now Playing Info & Speed Control -->
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
-                        <i id="nowPlayingIcon" class="fa-solid fa-clapperboard"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-2">
-                            <h2 id="nowPlayingTitle" class="text-xs sm:text-sm font-semibold text-white truncate max-w-[200px] sm:max-w-[320px]">
-                                Sintel — Короткометражный фильм
-                            </h2>
-                            <span id="localFileNameBadge" class="hidden text-[11px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                Локальный файл
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-3 text-[11px] text-gray-400 mt-0.5">
-                            <span id="playbackStateLabel">Ожидание запуска</span>
-                            <span>•</span>
-                            <label class="flex items-center gap-1 cursor-pointer hover:text-white">
-                                <span>Скорость:</span>
-                                <select id="playbackSpeedSelect" class="bg-transparent text-rose-300 font-semibold outline-none cursor-pointer">
-                                    <option value="0.75" class="bg-velvet-900">0.75x</option>
-                                    <option value="1" selected class="bg-velvet-900">1.0x</option>
-                                    <option value="1.25" class="bg-velvet-900">1.25x</option>
-                                    <option value="1.5" class="bg-velvet-900">1.5x</option>
-                                    <option value="2" class="bg-velvet-900">2.0x</option>
-                                </select>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Live Floating Emoji Reactions Bar -->
-                <div class="flex items-center flex-wrap gap-1.5 sm:gap-2">
-                    <div class="flex items-center bg-velvet-900/80 border border-white/10 rounded-2xl p-1 gap-1">
-                        <button data-reaction="❤️" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Сердечко">❤️</button>
-                        <button data-reaction="🥰" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Умиление">🥰</button>
-                        <button data-reaction="🍿" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Хрущу попкорном">🍿</button>
-                        <button data-reaction="😂" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Смешно">😂</button>
-                        <button data-reaction="😱" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Вот это поворот!">😱</button>
-                        <button data-reaction="🥺" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Растрогало">🥺</button>
-                        <button data-reaction="🔥" class="reaction-btn hover:scale-125 active:scale-95 transition px-2.5 py-1 rounded-xl hover:bg-white/10 text-base sm:text-lg" title="Огонь!">🔥</button>
-                    </div>
-
-                    <!-- Special Couple Action: Send Hug/Kiss -->
-                    <button id="sendLoveWaveBtn" class="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-400 hover:to-pink-500 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-rose-500/25 transition flex items-center gap-1.5 active:scale-95">
-                        <span>💞</span>
-                        <span>Обнять</span>
-                    </button>
-
-                    <!-- Toggle Sidebar Button (useful on smaller screens or Theater Mode) -->
-                    <button id="toggleSidebarBtn" class="glass-pill hover:bg-white/10 px-3 py-2 rounded-xl text-xs text-gray-300 flex items-center gap-1.5" title="Скрыть/показать панель чата">
-                        <i class="fa-solid fa-comments"></i>
-                        <span class="hidden sm:inline">Чат</span>
-                    </button>
-                </div>
+        <!-- Чат -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h3><i class="fa-solid fa-comments"></i> Чат для двоих</h3>
+                <span style="font-size: 11px; color: var(--text-muted);" id="userNameDisplay">Вы: Я</span>
             </div>
-        </section>
-
-        <!-- RIGHT SIDEBAR: Chat, Shared Playlist & Room Notes -->
-        <aside id="sidebarColumn" class="w-full lg:w-[370px] xl:w-[400px] shrink-0 flex flex-col glass-panel rounded-2xl overflow-hidden h-[540px] lg:h-[calc(100vh-110px)] transition-all duration-300">
-            
-            <!-- Sidebar Tabs -->
-            <div class="grid grid-cols-2 border-b border-white/10 bg-velvet-900/50 p-1.5 gap-1.5">
-                <button id="sidebarTabChat" class="py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 bg-white/10 text-white shadow">
-                    <i class="fa-regular fa-comment-dots text-rose-400"></i>
-                    <span>Чат для двоих</span>
-                </button>
-                <button id="sidebarTabPlaylist" class="py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 text-gray-400 hover:text-white hover:bg-white/5">
-                    <i class="fa-solid fa-list-ul text-violet-400"></i>
-                    <span>Плейлист</span>
-                    <span id="playlistCountBadge" class="text-[11px] px-1.5 py-0.2 rounded-full bg-violet-500/20 text-violet-300">3</span>
-                </button>
+            <div class="messages" id="messageList">
+                <div class="msg system">Добро пожаловать в комнату! Все паузы и перемотки синхронизируются автоматически.</div>
             </div>
-
-            <!-- TAB 1: REAL-TIME COUPLE CHAT -->
-            <div id="chatPanel" class="flex-1 flex flex-col min-h-0">
-                <!-- Pinned Cozy Status Banner -->
-                <div class="px-4 py-2 bg-gradient-to-r from-rose-500/10 via-violet-500/10 to-transparent border-b border-white/5 flex items-center justify-between text-[11px] text-gray-300">
-                    <span class="flex items-center gap-1.5">
-                        <i class="fa-solid fa-sparkles text-rose-400"></i>
-                        <span>Все паузы и перемотки видны в чате</span>
-                    </span>
-                    <button id="shareTimecodeBtn" class="text-rose-300 hover:text-rose-200 underline font-medium" title="Отправить текущий таймкод в чат">
-                        + Таймкод
-                    </button>
-                </div>
-
-                <!-- Messages Container -->
-                <div id="chatMessagesList" class="flex-1 overflow-y-auto p-4 space-y-3">
-                    <!-- Populated dynamically -->
-                </div>
-
-                <!-- Chat Input Form -->
-                <form id="chatForm" class="p-3 border-t border-white/10 bg-velvet-900/60 flex items-center gap-2">
-                    <input id="chatMessageInput" type="text" placeholder="Написать сообщение половинке..." autocomplete="off"
-                        class="flex-1 bg-velvet-800/90 border border-white/10 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-gray-500 outline-none transition">
-                    <button type="submit" class="w-10 h-10 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 hover:opacity-95 text-white flex items-center justify-center shadow-lg shadow-rose-500/20 transition shrink-0">
-                        <i class="fa-solid fa-paper-plane text-xs"></i>
-                    </button>
-                </form>
+            <div class="chat-input-bar">
+                <input type="text" id="chatInput" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+                <button class="btn btn-primary" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
-
-            <!-- TAB 2: SHARED PLAYLIST & EPISODE QUEUE -->
-            <div id="playlistPanel" class="hidden flex-1 flex flex-col min-h-0">
-                <!-- Add Item to Playlist Form -->
-                <div class="p-3.5 border-b border-white/10 bg-velvet-900/40 space-y-2.5">
-                    <p class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                        <i class="fa-solid fa-plus-circle text-violet-400"></i>
-                        <span>Добавить фильм или серию в очередь</span>
-                    </p>
-                    <input id="playlistTitleInput" type="text" placeholder="Название (например: 1 сезон 2 серия)" 
-                        class="w-full bg-velvet-900 border border-white/10 focus:border-violet-500 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 outline-none">
-                    <div class="flex gap-2">
-                        <input id="playlistUrlInput" type="text" placeholder="Ссылка (MP4, HLS, YouTube или Iframe)" 
-                            class="flex-1 bg-velvet-900 border border-white/10 focus:border-violet-500 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 outline-none">
-                        <button id="addPlaylistItemBtn" class="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shrink-0">
-                            Добавить
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Playlist Items List -->
-                <div id="playlistItemsContainer" class="flex-1 overflow-y-auto p-3 space-y-2">
-                    <!-- Rendered dynamically -->
-                </div>
-            </div>
-        </aside>
+        </div>
     </main>
 
-    <!-- MODAL 1: Profile Customization (Name, Avatar, Mood) -->
-    <div id="profileModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="glass-panel rounded-3xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-5">
-            <div class="flex items-center justify-between">
-                <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
-                    <i class="fa-solid fa-user-astronaut text-rose-400"></i>
-                    <span>Твой профиль в кинозале</span>
-                </h3>
-                <button id="closeProfileModalBtn" class="text-gray-400 hover:text-white w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
+    <script>
+        // Идентификация пользователя и комнаты
+        const urlParams = new URLSearchParams(window.location.search);
+        let currentRoom = (urlParams.get('room') || 'LOVE-01').toUpperCase();
+        document.getElementById('roomInput').value = currentRoom;
 
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1.5">Как тебя называть?</label>
-                    <input id="profileNameInput" type="text" maxlength="24" placeholder="Например: Котик, Алиса, Максим..."
-                        class="w-full bg-velvet-900 border border-white/15 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none">
-                </div>
+        const clientId = 'user_' + Math.random().toString(36).substring(2, 9);
+        const myName = urlParams.get('role') === 'girl' ? 'Любимая 🥰' : 'Я 🎬';
+        document.getElementById('userNameDisplay').textContent = `Вы: ${myName}`;
 
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1.5">Выбери милый аватар:</label>
-                    <div id="avatarPickerGrid" class="grid grid-cols-6 gap-2">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
+        const video = document.getElementById('player');
+        const messageList = document.getElementById('messageList');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
 
-                <div>
-                    <label class="block text-xs text-gray-400 mb-1.5">Статус-настроение:</label>
-                    <select id="profileMoodInput" class="w-full bg-velvet-900 border border-white/15 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none">
-                        <option value="Готовлю попкорн 🍿">Готовлю попкорн 🍿</option>
-                        <option value="Жду тебя ❤️">Жду тебя ❤️</option>
-                        <option value="Укутался в плед ☕">Укутался в плед ☕</option>
-                        <option value="Выбираю фильм 🎬">Выбираю фильм 🎬</option>
-                        <option value="Скучаю по тебе 🥰">Скучаю по тебе 🥰</option>
-                    </select>
-                </div>
-            </div>
+        let isIncomingSync = false; // Флаг для предотвращения бесконечного зацикливания событий
+        let mqttClient = null;
 
-            <div class="flex justify-end gap-2 pt-2">
-                <button id="saveProfileBtn" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 hover:opacity-95 text-white font-semibold text-sm shadow-lg shadow-rose-500/25 transition">
-                    Сохранить профиль
-                </button>
-            </div>
-        </div>
-    </div>
+        // Подключение к публичному защищённому брокеру EMQX (работает в РФ без блокировок)
+        function initSync() {
+            if (mqttClient) {
+                mqttClient.end();
+            }
 
-    <!-- MODAL 2: Change / Create Room -->
-    <div id="roomModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="glass-panel rounded-3xl max-w-md w-full p-6 border border-white/15 shadow-2xl space-y-5">
-            <div class="flex items-center justify-between">
-                <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
-                    <i class="fa-solid fa-key text-violet-400"></i>
-                    <span>Комната для двоих</span>
-                </h3>
-                <button id="closeRoomModalBtn" class="text-gray-400 hover:text-white w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
+            statusDot.className = 'status-dot offline';
+            statusBadge.className = 'status-badge offline';
+            statusText.textContent = 'Подключение...';
 
-            <p class="text-xs text-gray-300 leading-relaxed">
-                Введите секретный код комнаты, чтобы подключиться к своей второй половинке, или придумайте собственный код (например, <span class="text-rose-300 font-mono">OUR-DATE</span>).
-            </p>
+            const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+            mqttClient = mqtt.connect(brokerUrl, {
+                clientId: clientId,
+                clean: true,
+                connectTimeout: 5000,
+                reconnectPeriod: 2000
+            });
 
-            <div class="space-y-3">
-                <input id="roomCodeInput" type="text" maxlength="20" placeholder="Введите код комнаты..."
-                    class="w-full bg-velvet-900 border border-white/15 focus:border-violet-500 rounded-xl px-4 py-3 text-center font-mono text-lg uppercase tracking-widest text-white outline-none">
-                
-                <div class="flex gap-2">
-                    <button id="generateRandomRoomBtn" class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs sm:text-sm text-gray-200 font-medium transition">
-                        🎲 Случайный код
-                    </button>
-                    <button id="joinRoomConfirmBtn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 hover:opacity-95 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-rose-500/25 transition">
-                        Войти в комнату
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+            const topic = `duocinema/room/${currentRoom}`;
 
-    <!-- Custom Notification Toast -->
-    <div id="globalToast" class="fixed bottom-5 right-5 z-50 translate-y-20 opacity-0 transition-all duration-300 pointer-events-none glass-panel px-4 py-3 rounded-2xl border border-rose-500/40 shadow-2xl flex items-center gap-3">
-        <i id="globalToastIcon" class="fa-solid fa-circle-check text-rose-400 text-lg"></i>
-        <span id="globalToastMessage" class="text-xs sm:text-sm text-white font-medium">Скопировано!</span>
-    </div>
+            mqttClient.on('connect', () => {
+                statusDot.className = 'status-dot';
+                statusBadge.className = 'status-badge';
+                statusText.textContent = `В сети: ${currentRoom}`;
 
-    <!-- APPLICATION LOGIC & FIREBASE REAL-TIME SYNC -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+                mqttClient.subscribe(topic, { qos: 0 });
+                // Оповещаем о входе
+                publish({ type: 'presence', text: `${myName} вошёл(ла) в комнату` });
+            });
 
-        // ==========================================
-        // 1. STATE & CONFIGURATION
-        // ==========================================
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'duocinema-watch-party';
-        let db = null;
-        let auth = null;
-        let currentUser = null;
-        let roomUnsubscribe = null;
-        let isCloudConnected = false;
-
-        // Local BroadcastChannel fallback for multi-tab testing if Firebase env is absent
-        const localChannel = new BroadcastChannel('duocinema_sync_channel');
-
-        const AVATAR_OPTIONS = ['🦊', '🐱', '🐰', '🐼', '🐨', '🦁', '🐯', '🦄', '🐸', '🦉', '🦋', '❤️'];
-
-        // User Profile State (No localStorage used; synced with Firestore private profile doc)
-        let myProfile = {
-            uid: crypto.randomUUID(),
-            name: 'Киноман ' + Math.floor(10 + Math.random() * 89),
-            avatar: AVATAR_OPTIONS[Math.floor(Math.random() * 6)],
-            mood: 'Готовлю попкорн 🍿'
-        };
-
-        // Active Room State
-        let currentRoomId = 'LOVE-01';
-        let isApplyingRemoteUpdate = false;
-        let lastBroadcastTime = 0;
-        let lastHandledReactionId = null;
-        let lastHandledLoveWaveId = null;
-        let lastHandledCountdownId = null;
-
-        // Media Players State
-        let activeTab = 'direct'; // 'direct' | 'youtube' | 'embed' | 'local'
-        let hlsInstance = null;
-        let ytPlayer = null;
-        let isYtReady = false;
-        let pendingYtVideoId = null;
-        let ambilightEnabled = true;
-
-        // Default Initial Room Document Structure
-        const getDefaultRoomData = () => ({
-            roomId: currentRoomId,
-            playerState: {
-                sourceType: 'direct',
-                url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-                title: 'Sintel — Короткометражный фильм',
-                isPlaying: false,
-                currentTime: 0,
-                playbackRate: 1,
-                updatedAt: Date.now(),
-                updatedBy: myProfile.name
-            },
-            members: {},
-            playlist: [
-                {
-                    id: 'item-1',
-                    title: 'Sintel — Фэнтези короткометражка',
-                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-                    sourceType: 'direct',
-                    watched: false
-                },
-                {
-                    id: 'item-2',
-                    title: 'Tears of Steel — Sci-Fi короткометражка',
-                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-                    sourceType: 'direct',
-                    watched: false
-                },
-                {
-                    id: 'item-3',
-                    title: 'Big Buck Bunny — Уютный мультфильм',
-                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-                    sourceType: 'direct',
-                    watched: false
+            mqttClient.on('message', (t, payload) => {
+                try {
+                    const data = JSON.parse(payload.toString());
+                    if (data.senderId === clientId) return; // Игнорируем собственные эхо-сообщения
+                    handleIncomingSignal(data);
+                } catch (e) {
+                    console.error("Ошибка парсинга:", e);
                 }
-            ],
-            chatMessages: [
-                {
-                    id: 'welcome-msg',
-                    senderId: 'system',
-                    senderName: 'DuoCinema',
-                    senderAvatar: '✨',
-                    text: 'Добро пожаловать в ваш уютный кинозал для двоих! Выберите фильм или включите локальный файл.',
-                    timestamp: Date.now(),
-                    isSystem: true
-                }
-            ],
-            lastReaction: null,
-            lastLoveWave: null,
-            lastCountdown: null
+            });
+
+            mqttClient.on('error', () => {
+                statusDot.className = 'status-dot offline';
+                statusBadge.className = 'status-badge offline';
+                statusText.textContent = 'Сбой сети';
+            });
+        }
+
+        function publish(data) {
+            if (!mqttClient || !mqttClient.connected) return;
+            data.senderId = clientId;
+            data.senderName = myName;
+            data.time = Date.now();
+            mqttClient.publish(`duocinema/room/${currentRoom}`, JSON.stringify(data));
+        }
+
+        // Обработка команд от партнёра
+        function handleIncomingSignal(data) {
+            switch (data.type) {
+                case 'play':
+                    isIncomingSync = true;
+                    if (Math.abs(video.currentTime - data.currentTime) > 1.2) {
+                        video.currentTime = data.currentTime;
+                    }
+                    video.play().finally(() => { isIncomingSync = false; });
+                    addSystemMessage(`${data.senderName} нажал(а) Play`);
+                    break;
+
+                case 'pause':
+                    isIncomingSync = true;
+                    video.pause();
+                    if (Math.abs(video.currentTime - data.currentTime) > 1.2) {
+                        video.currentTime = data.currentTime;
+                    }
+                    setTimeout(() => { isIncomingSync = false; }, 200);
+                    addSystemMessage(`${data.senderName} поставил(а) на паузу (${formatTime(data.currentTime)})`);
+                    break;
+
+                case 'seek':
+                    isIncomingSync = true;
+                    video.currentTime = data.currentTime;
+                    setTimeout(() => { isIncomingSync = false; }, 200);
+                    addSystemMessage(`${data.senderName} перемотал(а) на ${formatTime(data.currentTime)}`);
+                    break;
+
+                case 'change_source':
+                    isIncomingSync = true;
+                    video.src = data.url;
+                    video.load();
+                    document.getElementById('videoUrlInput').value = data.url;
+                    addSystemMessage(`${data.senderName} сменил(а) видео`);
+                    setTimeout(() => { isIncomingSync = false; }, 300);
+                    break;
+
+                case 'chat':
+                    appendMessage(data.text, 'partner', data.senderName);
+                    break;
+
+                case 'reaction':
+                    renderFlyingEmoji(data.emoji);
+                    break;
+
+                case 'hug':
+                    showHugAnimation(data.senderName);
+                    break;
+
+                case 'presence':
+                    addSystemMessage(data.text);
+                    break;
+            }
+        }
+
+        // Синхронизация действий плеера
+        video.addEventListener('play', () => {
+            if (isIncomingSync) return;
+            publish({ type: 'play', currentTime: video.currentTime });
         });
 
-        let localRoomSnapshot = getDefaultRoomData();
+        video.addEventListener('pause', () => {
+            if (isIncomingSync) return;
+            publish({ type: 'pause', currentTime: video.currentTime });
+        });
 
-        // ==========================================
-        // 2. DOM ELEMENTS
-        // ==========================================
-        const html5Video = document.getElementById('mainHtml5Video');
-        const subtitleTrack = document.getElementById('subtitleTrack');
-        const youtubeWrapper = document.getElementById('youtubeWrapper');
-        const embedWrapper = document.getElementById('embedWrapper');
-        const customEmbedIframe = document.getElementById('customEmbedIframe');
-        const ambilightAura = document.getElementById('ambilightAura');
+        video.addEventListener('seeked', () => {
+            if (isIncomingSync) return;
+            publish({ type: 'seek', currentTime: video.currentTime });
+        });
 
-        const activeRoomCodeDisplay = document.getElementById('activeRoomCodeDisplay');
-        const membersPresenceBar = document.getElementById('membersPresenceBar');
-        const myAvatarHeader = document.getElementById('myAvatarHeader');
-        const myNameHeader = document.getElementById('myNameHeader');
-        const nowPlayingTitle = document.getElementById('nowPlayingTitle');
-        const playbackStateLabel = document.getElementById('playbackStateLabel');
-        const playbackSpeedSelect = document.getElementById('playbackSpeedSelect');
-        const localFileNameBadge = document.getElementById('localFileNameBadge');
-
-        const chatMessagesList = document.getElementById('chatMessagesList');
-        const playlistItemsContainer = document.getElementById('playlistItemsContainer');
-        const playlistCountBadge = document.getElementById('playlistCountBadge');
-
-        // ==========================================
-        // 3. SOUND EFFECTS (Soft Web Audio Chimes)
-        // ==========================================
-        function playGentleSound(type = 'pop') {
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-
-                const now = ctx.currentTime;
-                if (type === 'pop') {
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(520, now);
-                    osc.frequency.exponentialRampToValueAtTime(780, now + 0.09);
-                    gain.gain.setValueAtTime(0.08, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-                    osc.start(now);
-                    osc.stop(now + 0.1);
-                } else if (type === 'love') {
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(440, now);
-                    osc.frequency.setValueAtTime(554.37, now + 0.12);
-                    osc.frequency.setValueAtTime(659.25, now + 0.24);
-                    gain.gain.setValueAtTime(0.1, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-                    osc.start(now);
-                    osc.stop(now + 0.5);
-                } else if (type === 'beep') {
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(660, now);
-                    gain.gain.setValueAtTime(0.1, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-                    osc.start(now);
-                    osc.stop(now + 0.18);
-                }
-            } catch (e) {
-                // Ignore if audio context is blocked before interaction
-            }
-        }
-
-        // ==========================================
-        // 4. UI HELPERS & TOAST NOTIFICATIONS
-        // ==========================================
-        function showToast(message, iconClass = 'fa-solid fa-circle-check text-rose-400') {
-            const toast = document.getElementById('globalToast');
-            const icon = document.getElementById('globalToastIcon');
-            const msg = document.getElementById('globalToastMessage');
-            icon.className = `${iconClass} text-lg`;
-            msg.textContent = message;
-            toast.classList.remove('translate-y-20', 'opacity-0');
-            setTimeout(() => {
-                toast.classList.add('translate-y-20', 'opacity-0');
-            }, 3000);
-        }
-
-        let syncToastTimer = null;
-        function showVideoSyncOverlay(text) {
-            const toast = document.getElementById('videoSyncToast');
-            const label = document.getElementById('videoSyncToastText');
-            label.textContent = text;
-            toast.classList.remove('opacity-0');
-            clearTimeout(syncToastTimer);
-            syncToastTimer = setTimeout(() => {
-                toast.classList.add('opacity-0');
-            }, 2600);
-        }
-
-        function formatTimecode(seconds) {
-            if (!seconds || isNaN(seconds) || seconds < 0) return '00:00';
-            const hrs = Math.floor(seconds / 3600);
-            const mins = Math.floor((seconds % 3600) / 60);
-            const secs = Math.floor(seconds % 60);
-            if (hrs > 0) {
-                return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-            }
-            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        }
-
-        // ==========================================
-        // 5. YOUTUBE IFRAME API INITIALIZATION
-        // ==========================================
-        function extractYouTubeId(inputUrl) {
-            if (!inputUrl) return null;
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
-            const match = inputUrl.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        }
-
-        function initYouTubePlayer() {
-            if (typeof YT === 'undefined' || !YT.Player) return;
-            ytPlayer = new YT.Player('youtubePlayerDiv', {
-                width: '100%',
-                height: '100%',
-                videoId: pendingYtVideoId || 'dQw4w9WgXcQ',
-                playerVars: {
-                    playsinline: 1,
-                    rel: 0,
-                    modestbranding: 1
-                },
-                events: {
-                    onReady: () => {
-                        isYtReady = true;
-                        if (pendingYtVideoId) {
-                            ytPlayer.cueVideoById(pendingYtVideoId);
-                        }
-                    },
-                    onStateChange: (event) => {
-                        if (isApplyingRemoteUpdate || activeTab !== 'youtube') return;
-                        const currentTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-                        if (event.data === YT.PlayerState.PLAYING) {
-                            broadcastPlayerAction({ isPlaying: true, currentTime });
-                        } else if (event.data === YT.PlayerState.PAUSED) {
-                            broadcastPlayerAction({ isPlaying: false, currentTime });
-                        }
-                    }
-                }
-            });
-        }
-
-        window.onYouTubeIframeAPIReady = () => {
-            initYouTubePlayer();
-        };
-        if (typeof YT !== 'undefined' && YT.Player) {
-            initYouTubePlayer();
-        }
-
-        // ==========================================
-        // 6. MULTI-SOURCE VIDEO LOADING ENGINE
-        // ==========================================
-        function switchSourceTabUI(tabName) {
-            activeTab = tabName;
-            document.querySelectorAll('.source-tab-btn').forEach(btn => {
-                const isSelected = btn.getAttribute('data-source-tab') === tabName;
-                if (isSelected) {
-                    btn.className = 'source-tab-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-2 bg-gradient-to-r from-rose-500 to-violet-600 text-white shadow-md';
-                } else {
-                    btn.className = 'source-tab-btn px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition flex items-center gap-2 text-gray-300 hover:bg-white/10';
-                }
-            });
-
-            document.querySelectorAll('.source-tab-panel').forEach(panel => {
-                panel.classList.add('hidden');
-                panel.classList.remove('flex');
-            });
-            const activePanel = document.getElementById(`tabPanel-${tabName}`);
-            if (activePanel) {
-                activePanel.classList.remove('hidden');
-                activePanel.classList.add('flex');
-            }
-        }
-
-        function activatePlayerContainer(type) {
-            html5Video.classList.add('hidden');
-            youtubeWrapper.classList.add('hidden');
-            embedWrapper.classList.add('hidden');
-
-            // Pause inactive players safely
-            if (type !== 'direct' && type !== 'local') {
-                html5Video.pause();
-            }
-            if (type !== 'youtube' && isYtReady && ytPlayer && ytPlayer.pauseVideo) {
-                try { ytPlayer.pauseVideo(); } catch (e) {}
-            }
-            if (type !== 'embed') {
-                customEmbedIframe.src = 'about:blank';
-            }
-
-            if (type === 'direct' || type === 'local') {
-                html5Video.classList.remove('hidden');
-            } else if (type === 'youtube') {
-                youtubeWrapper.classList.remove('hidden');
-            } else if (type === 'embed') {
-                embedWrapper.classList.remove('hidden');
-            }
-        }
-
-        function loadDirectOrHlsMedia(url, title = 'Прямой эфир / Фильм') {
+        // Смена видео
+        function applyVideoUrl() {
+            const url = document.getElementById('videoUrlInput').value.trim();
             if (!url) return;
-            activatePlayerContainer('direct');
-            localFileNameBadge.classList.add('hidden');
-            nowPlayingTitle.textContent = title;
-
-            if (hlsInstance) {
-                hlsInstance.destroy();
-                hlsInstance = null;
-            }
-
-            if (url.includes('.m3u8') && window.Hls && Hls.isSupported()) {
-                hlsInstance = new Hls();
-                hlsInstance.loadSource(url);
-                hlsInstance.attachMedia(html5Video);
-            } else {
-                html5Video.src = url;
-            }
+            video.src = url;
+            video.load();
+            video.play();
+            publish({ type: 'change_source', url: url });
         }
 
-        function loadYouTubeMedia(url, title = 'YouTube Видео') {
-            const videoId = extractYouTubeId(url) || url;
-            if (!videoId) {
-                showToast('Не удалось распознать ссылку YouTube', 'fa-solid fa-triangle-exclamation text-amber-400');
-                return;
-            }
-            activatePlayerContainer('youtube');
-            localFileNameBadge.classList.add('hidden');
-            nowPlayingTitle.textContent = title;
-            pendingYtVideoId = videoId;
-
-            if (isYtReady && ytPlayer && ytPlayer.loadVideoById) {
-                ytPlayer.cueVideoById(videoId);
-            }
-        }
-
-        function extractIframeSrc(rawInput) {
-            const trimmed = rawInput.trim();
-            if (trimmed.startsWith('<iframe')) {
-                const match = trimmed.match(/src=["']([^"']+)["']/i);
-                return match ? match[1] : trimmed;
-            }
-            return trimmed;
-        }
-
-        function loadEmbedMedia(rawUrl, title = 'Внешний киноплеер') {
-            const cleanSrc = extractIframeSrc(rawUrl);
-            if (!cleanSrc) return;
-            activatePlayerContainer('embed');
-            localFileNameBadge.classList.add('hidden');
-            nowPlayingTitle.textContent = title;
-            if (customEmbedIframe.src !== cleanSrc) {
-                customEmbedIframe.src = cleanSrc;
-            }
-        }
-
-        // ==========================================
-        // 7. REAL-TIME SYNCHRONIZATION (FIRESTORE + FALLBACK)
-        // ==========================================
-        function getRoomDocRef(roomId) {
-            return doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
-        }
-
-        async function updateRoomInCloud(partialData) {
-            // Merge locally first
-            localRoomSnapshot = {
-                ...localRoomSnapshot,
-                ...partialData
-            };
-            localChannel.postMessage({ type: 'ROOM_UPDATE', roomId: currentRoomId, data: localRoomSnapshot });
-
-            if (!isCloudConnected || !currentUser || !db) {
-                applyRoomSnapshotToUI(localRoomSnapshot);
-                return;
-            }
-
-            try {
-                const roomRef = getRoomDocRef(currentRoomId);
-                await setDoc(roomRef, partialData, { merge: true });
-            } catch (err) {
-                console.error('Ошибка синхронизации комнаты:', err);
-            }
-        }
-
-        async function broadcastPlayerAction(changes, systemNote = null) {
-            if (isApplyingRemoteUpdate) return;
-            const now = Date.now();
-            if (now - lastBroadcastTime < 250 && !changes.url) return;
-            lastBroadcastTime = now;
-
-            const updatedPlayerState = {
-                ...localRoomSnapshot.playerState,
-                ...changes,
-                updatedAt: now,
-                updatedBy: myProfile.name
-            };
-
-            const payload = { playerState: updatedPlayerState };
-
-            if (systemNote) {
-                const sysMsg = {
-                    id: 'sys-' + now + '-' + Math.random().toString(36).slice(2, 6),
-                    senderId: 'system',
-                    senderName: myProfile.name,
-                    senderAvatar: myProfile.avatar,
-                    text: systemNote,
-                    timestamp: now,
-                    isSystem: true
-                };
-                payload.chatMessages = [...(localRoomSnapshot.chatMessages || []).slice(-70), sysMsg];
-            }
-
-            await updateRoomInCloud(payload);
-        }
-
-        function applyRemotePlayerState(playerState) {
-            if (!playerState) return;
-            isApplyingRemoteUpdate = true;
-
-            try {
-                // 1. Check if source type or URL changed
-                if (playerState.sourceType && playerState.sourceType !== activeTab) {
-                    switchSourceTabUI(playerState.sourceType);
-                }
-
-                if (playerState.sourceType === 'direct') {
-                    if (html5Video.src !== playerState.url && !playerState.url.includes('.m3u8')) {
-                        loadDirectOrHlsMedia(playerState.url, playerState.title);
-                    } else if (playerState.url.includes('.m3u8') && !hlsInstance) {
-                        loadDirectOrHlsMedia(playerState.url, playerState.title);
-                    }
-                } else if (playerState.sourceType === 'youtube') {
-                    const targetId = extractYouTubeId(playerState.url) || playerState.url;
-                    if (targetId && targetId !== pendingYtVideoId) {
-                        loadYouTubeMedia(playerState.url, playerState.title);
-                    }
-                } else if (playerState.sourceType === 'embed') {
-                    const cleanSrc = extractIframeSrc(playerState.url);
-                    if (cleanSrc && customEmbedIframe.src !== cleanSrc) {
-                        loadEmbedMedia(cleanSrc, playerState.title);
-                    }
-                } else if (playerState.sourceType === 'local') {
-                    activatePlayerContainer('local');
-                    localFileNameBadge.classList.remove('hidden');
-                    nowPlayingTitle.textContent = playerState.title || 'Локальный видеофайл';
-                }
-
-                // 2. Sync Playback Rate
-                if (playerState.playbackRate && html5Video.playbackRate !== playerState.playbackRate) {
-                    html5Video.playbackRate = playerState.playbackRate;
-                    playbackSpeedSelect.value = String(playerState.playbackRate);
-                }
-
-                // 3. Sync Current Time & Play/Pause with smart drift tolerance (1.8s)
-                if (playerState.sourceType === 'direct' || playerState.sourceType === 'local') {
-                    if (html5Video.readyState >= 1 && typeof playerState.currentTime === 'number') {
-                        const drift = Math.abs(html5Video.currentTime - playerState.currentTime);
-                        if (drift > 1.8) {
-                            html5Video.currentTime = playerState.currentTime;
-                            showVideoSyncOverlay(`${playerState.updatedBy}: перемотка на ${formatTimecode(playerState.currentTime)}`);
-                        }
-                    }
-
-                    if (playerState.isPlaying && html5Video.paused && html5Video.src) {
-                        html5Video.play().catch(() => {
-                            showVideoSyncOverlay('Нажмите Play для старта со звуком');
-                        });
-                    } else if (!playerState.isPlaying && !html5Video.paused) {
-                        html5Video.pause();
-                        showVideoSyncOverlay(`${playerState.updatedBy} поставил(а) на паузу`);
-                    }
-                } else if (playerState.sourceType === 'youtube' && isYtReady && ytPlayer) {
-                    const ytTime = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
-                    if (typeof playerState.currentTime === 'number' && Math.abs(ytTime - playerState.currentTime) > 2.2) {
-                        ytPlayer.seekTo(playerState.currentTime, true);
-                    }
-                    const ytState = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
-                    if (playerState.isPlaying && ytState !== YT.PlayerState.PLAYING) {
-                        ytPlayer.playVideo();
-                    } else if (!playerState.isPlaying && ytState === YT.PlayerState.PLAYING) {
-                        ytPlayer.pauseVideo();
-                    }
-                }
-
-                // Update status text
-                playbackStateLabel.textContent = playerState.isPlaying
-                    ? `Идёт просмотр • ${formatTimecode(playerState.currentTime)}`
-                    : `На паузе (${formatTimecode(playerState.currentTime)})`;
-
-            } finally {
-                setTimeout(() => {
-                    isApplyingRemoteUpdate = false;
-                }, 350);
-            }
-        }
-
-        // ==========================================
-        // 8. APPLY FULL ROOM SNAPSHOT TO UI
-        // ==========================================
-        function applyRoomSnapshotToUI(roomData) {
-            if (!roomData) return;
-            localRoomSnapshot = roomData;
-
-            // 1. Player State
-            if (roomData.playerState) {
-                applyRemotePlayerState(roomData.playerState);
-            }
-
-            // 2. Members Presence Bar
-            renderMembersPresence(roomData.members || {});
-
-            // 3. Chat Messages
-            renderChatMessages(roomData.chatMessages || []);
-
-            // 4. Shared Playlist
-            renderPlaylist(roomData.playlist || []);
-
-            // 5. Floating Emoji Reaction Event
-            if (roomData.lastReaction && roomData.lastReaction.id !== lastHandledReactionId) {
-                lastHandledReactionId = roomData.lastReaction.id;
-                if (Date.now() - roomData.lastReaction.timestamp < 10000) {
-                    spawnFloatingEmoji(roomData.lastReaction.emoji, roomData.lastReaction.senderName);
-                }
-            }
-
-            // 6. Couple Love Wave Event
-            if (roomData.lastLoveWave && roomData.lastLoveWave.id !== lastHandledLoveWaveId) {
-                lastHandledLoveWaveId = roomData.lastLoveWave.id;
-                if (Date.now() - roomData.lastLoveWave.timestamp < 10000) {
-                    triggerLoveBannerAnimation(roomData.lastLoveWave.senderName, roomData.lastLoveWave.senderAvatar);
-                }
-            }
-
-            // 7. 3-2-1 Countdown Event for External Embeds
-            if (roomData.lastCountdown && roomData.lastCountdown.id !== lastHandledCountdownId) {
-                lastHandledCountdownId = roomData.lastCountdown.id;
-                if (Date.now() - roomData.lastCountdown.timestamp < 8000) {
-                    runSynchronizedCountdown();
-                }
-            }
-        }
-
-        function renderMembersPresence(membersMap) {
-            // Ensure current user is always visible
-            const allMembers = {
-                ...membersMap,
-                [myProfile.uid]: {
-                    uid: myProfile.uid,
-                    name: myProfile.name,
-                    avatar: myProfile.avatar,
-                    mood: myProfile.mood,
-                    lastSeen: Date.now()
-                }
-            };
-
-            const memberList = Object.values(allMembers);
-            membersPresenceBar.innerHTML = memberList.map(m => `
-                <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10" title="${m.name} — ${m.mood || 'В кинозале'}">
-                    <span class="text-sm">${m.avatar || '🦊'}</span>
-                    <span class="text-xs font-medium text-gray-200 max-w-[85px] truncate">${m.name}</span>
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                </div>
-            `).join('');
-        }
-
-        function renderChatMessages(messages) {
-            chatMessagesList.innerHTML = messages.map(msg => {
-                if (msg.isSystem) {
-                    return `
-                        <div class="flex justify-center my-1">
-                            <div class="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-gray-400 flex items-center gap-1.5">
-                                <span>${msg.senderAvatar || '✨'}</span>
-                                <span>${escapeHtml(msg.text)}</span>
-                            </div>
-                        </div>
-                    `;
-                }
-                const isMe = msg.senderId === myProfile.uid;
-                const timeStr = new Date(msg.timestamp || Date.now()).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                return `
-                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
-                        <div class="flex items-center gap-1.5 mb-1 px-1">
-                            <span class="text-xs">${msg.senderAvatar || '🦊'}</span>
-                            <span class="text-[11px] font-medium text-gray-400">${escapeHtml(msg.senderName)}</span>
-                            <span class="text-[10px] text-gray-500">${timeStr}</span>
-                        </div>
-                        <div class="max-w-[85%] px-3.5 py-2 rounded-2xl text-xs sm:text-sm leading-relaxed ${
-                            isMe
-                                ? 'bg-gradient-to-r from-rose-500 to-violet-600 text-white rounded-br-xs shadow-md'
-                                : 'bg-velvet-800 border border-white/10 text-gray-100 rounded-bl-xs'
-                        }">
-                            ${escapeHtml(msg.text)}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            chatMessagesList.scrollTop = chatMessagesList.scrollHeight;
-        }
-
-        function renderPlaylist(playlist) {
-            playlistCountBadge.textContent = playlist.length;
-            if (playlist.length === 0) {
-                playlistItemsContainer.innerHTML = `
-                    <div class="text-center py-10 text-gray-500 text-xs">
-                        В очереди пока пусто. Добавьте любимый фильм или сериал выше!
-                    </div>
-                `;
-                return;
-            }
-
-            playlistItemsContainer.innerHTML = playlist.map((item) => {
-                const isCurrent = localRoomSnapshot.playerState?.url === item.url;
-                return `
-                    <div class="p-3 rounded-xl border transition flex items-center justify-between gap-2 ${
-                        isCurrent
-                            ? 'bg-rose-500/15 border-rose-500/40'
-                            : 'bg-velvet-900/60 border-white/10 hover:border-white/20'
-                    }">
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-1.5">
-                                <span class="text-xs font-semibold ${item.watched ? 'line-through text-gray-500' : 'text-white'} truncate">
-                                    ${escapeHtml(item.title)}
-                                </span>
-                                ${isCurrent ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500 text-white font-bold">Играет</span>' : ''}
-                            </div>
-                            <p class="text-[11px] text-gray-400 truncate mt-0.5">${escapeHtml(item.url)}</p>
-                        </div>
-                        <div class="flex items-center gap-1 shrink-0">
-                            <button data-play-item="${item.id}" class="w-8 h-8 rounded-lg bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white transition flex items-center justify-center" title="Включить для обоих">
-                                <i class="fa-solid fa-play text-xs"></i>
-                            </button>
-                            <button data-toggle-watched="${item.id}" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 ${item.watched ? 'text-emerald-400' : 'text-gray-400'} transition flex items-center justify-center" title="Отметить просмотренным">
-                                <i class="fa-solid fa-check text-xs"></i>
-                            </button>
-                            <button data-delete-item="${item.id}" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-rose-600/30 text-gray-400 hover:text-rose-300 transition flex items-center justify-center" title="Удалить">
-                                <i class="fa-solid fa-trash text-xs"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            // Attach playlist item handlers
-            playlistItemsContainer.querySelectorAll('[data-play-item]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const id = btn.getAttribute('data-play-item');
-                    const found = (localRoomSnapshot.playlist || []).find(i => i.id === id);
-                    if (found) {
-                        switchSourceTabUI(found.sourceType || 'direct');
-                        broadcastPlayerAction({
-                            sourceType: found.sourceType || 'direct',
-                            url: found.url,
-                            title: found.title,
-                            currentTime: 0,
-                            isPlaying: true
-                        }, `включил(а) из плейлиста: «${found.title}»`);
-                    }
-                });
-            });
-
-            playlistItemsContainer.querySelectorAll('[data-toggle-watched]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const id = btn.getAttribute('data-toggle-watched');
-                    const updated = (localRoomSnapshot.playlist || []).map(i =>
-                        i.id === id ? { ...i, watched: !i.watched } : i
-                    );
-                    updateRoomInCloud({ playlist: updated });
-                });
-            });
-
-            playlistItemsContainer.querySelectorAll('[data-delete-item]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const id = btn.getAttribute('data-delete-item');
-                    const updated = (localRoomSnapshot.playlist || []).filter(i => i.id !== id);
-                    updateRoomInCloud({ playlist: updated });
-                });
-            });
-        }
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
-
-        // ==========================================
-        // 9. FLOATING REACTIONS & COUPLE LOVE WAVE
-        // ==========================================
-        function spawnFloatingEmoji(emoji, senderName) {
-            playGentleSound('pop');
-            const stage = document.getElementById('floatingReactionsStage');
-            for (let i = 0; i < 4; i++) {
-                const el = document.createElement('div');
-                el.className = 'floating-emoji flex flex-col items-center';
-                const randomRight = 24 + Math.floor(Math.random() * 180);
-                el.style.right = `${randomRight}px`;
-                el.style.animationDelay = `${i * 0.12}s`;
-                el.innerHTML = `
-                    <span class="text-3xl sm:text-4xl">${emoji}</span>
-                    ${i === 0 ? `<span class="text-[10px] px-2 py-0.5 rounded-full bg-black/60 text-white mt-1">${escapeHtml(senderName)}</span>` : ''}
-                `;
-                stage.appendChild(el);
-                setTimeout(() => el.remove(), 3500);
-            }
-        }
-
-        let loveBannerTimeout = null;
-        function triggerLoveBannerAnimation(senderName, senderAvatar) {
-            playGentleSound('love');
-            const overlay = document.getElementById('loveBannerOverlay');
-            const title = document.getElementById('loveBannerTitle');
-            const subtitle = document.getElementById('loveBannerSubtitle');
-
-            title.textContent = `${senderAvatar || '💞'} ${senderName} нежно обнимает тебя!`;
-            subtitle.textContent = 'Даже на расстоянии вы сейчас вместе ❤️';
-
-            overlay.classList.remove('hidden');
-            spawnFloatingEmoji('💞', senderName);
-
-            clearTimeout(loveBannerTimeout);
-            loveBannerTimeout = setTimeout(() => {
-                overlay.classList.add('hidden');
-            }, 3700);
-        }
-
-        function runSynchronizedCountdown() {
-            const overlay = document.getElementById('countdownOverlay');
-            const numberEl = document.getElementById('countdownNumber');
-            overlay.classList.remove('hidden');
-            let count = 3;
-            numberEl.textContent = count;
-            playGentleSound('beep');
-
-            const interval = setInterval(() => {
-                count--;
-                if (count > 0) {
-                    numberEl.textContent = count;
-                    playGentleSound('beep');
-                } else if (count === 0) {
-                    numberEl.textContent = 'ЖМИ PLAY! ▶️';
-                    playGentleSound('love');
-                } else {
-                    clearInterval(interval);
-                    overlay.classList.add('hidden');
-                }
-            }, 1000);
-        }
-
-        // ==========================================
-        // 10. HTML5 VIDEO EVENT LISTENERS
-        // ==========================================
-        html5Video.addEventListener('play', () => {
-            if (isApplyingRemoteUpdate) return;
-            broadcastPlayerAction(
-                { isPlaying: true, currentTime: html5Video.currentTime },
-                `включил(а) воспроизведение на ${formatTimecode(html5Video.currentTime)}`
-            );
-        });
-
-        html5Video.addEventListener('pause', () => {
-            if (isApplyingRemoteUpdate || html5Video.ended) return;
-            broadcastPlayerAction(
-                { isPlaying: false, currentTime: html5Video.currentTime },
-                `поставил(а) на паузу (${formatTimecode(html5Video.currentTime)})`
-            );
-        });
-
-        html5Video.addEventListener('seeked', () => {
-            if (isApplyingRemoteUpdate) return;
-            broadcastPlayerAction(
-                { currentTime: html5Video.currentTime },
-                `перемотал(а) на ${formatTimecode(html5Video.currentTime)}`
-            );
-        });
-
-        html5Video.addEventListener('timeupdate', () => {
-            if (!html5Video.paused) {
-                playbackStateLabel.textContent = `Идёт просмотр • ${formatTimecode(html5Video.currentTime)}`;
-            }
-        });
-
-        playbackSpeedSelect.addEventListener('change', () => {
-            const rate = parseFloat(playbackSpeedSelect.value) || 1;
-            html5Video.playbackRate = rate;
-            broadcastPlayerAction(
-                { playbackRate: rate },
-                `изменил(а) скорость на ${rate}x`
-            );
-        });
-
-        // ==========================================
-        // 11. UI CONTROLS & INTERACTION LISTENERS
-        // ==========================================
-        // Source Tabs
-        document.querySelectorAll('.source-tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tab = btn.getAttribute('data-source-tab');
-                switchSourceTabUI(tab);
-            });
-        });
-
-        // Load Direct / HLS URL
-        document.getElementById('loadDirectBtn').addEventListener('click', () => {
-            const url = document.getElementById('directUrlInput').value.trim();
-            if (!url) {
-                showToast('Введите прямую ссылку на видео или .m3u8 поток', 'fa-solid fa-circle-info text-amber-400');
-                return;
-            }
-            loadDirectOrHlsMedia(url, 'Фильм по прямой ссылке');
-            broadcastPlayerAction({
-                sourceType: 'direct',
-                url,
-                title: 'Фильм по прямой ссылке',
-                currentTime: 0,
-                isPlaying: true
-            }, 'запустил(а) новый фильм по прямой ссылке');
-        });
-
-        // Preset Sample Movies
-        document.getElementById('presetMoviesSelect').addEventListener('change', (e) => {
-            const url = e.target.value;
-            if (!url) return;
-            const title = e.target.options[e.target.selectedIndex].text;
-            document.getElementById('directUrlInput').value = url;
-            loadDirectOrHlsMedia(url, title);
-            broadcastPlayerAction({
-                sourceType: 'direct',
-                url,
-                title,
-                currentTime: 0,
-                isPlaying: true
-            }, `включил(а) фильм «${title}»`);
-        });
-
-        // Load YouTube
-        document.getElementById('loadYoutubeBtn').addEventListener('click', () => {
-            const url = document.getElementById('youtubeUrlInput').value.trim();
-            const videoId = extractYouTubeId(url);
-            if (!videoId) {
-                showToast('Пожалуйста, вставьте корректную ссылку на YouTube', 'fa-solid fa-triangle-exclamation text-amber-400');
-                return;
-            }
-            loadYouTubeMedia(url, 'YouTube совместный просмотр');
-            broadcastPlayerAction({
-                sourceType: 'youtube',
-                url,
-                title: 'YouTube совместный просмотр',
-                currentTime: 0,
-                isPlaying: true
-            }, 'включил(а) видео на YouTube');
-        });
-
-        // Load External Embed / Iframe
-        document.getElementById('loadEmbedBtn').addEventListener('click', () => {
-            const raw = document.getElementById('embedUrlInput').value.trim();
-            if (!raw) {
-                showToast('Вставьте ссылку или код <iframe> внешнего плеера', 'fa-solid fa-circle-info text-amber-400');
-                return;
-            }
-            const cleanSrc = extractIframeSrc(raw);
-            loadEmbedMedia(cleanSrc, 'Внешний киноплеер');
-            broadcastPlayerAction({
-                sourceType: 'embed',
-                url: cleanSrc,
-                title: 'Внешний киноплеер',
-                currentTime: 0,
-                isPlaying: true
-            }, 'открыл(а) внешний плеер для обоих');
-        });
-
-        // Synchronized 3-2-1 Countdown for Embeds
-        document.getElementById('startCountdownBtn').addEventListener('click', () => {
-            const countdownEvent = {
-                id: 'cd-' + Date.now(),
-                senderName: myProfile.name,
-                timestamp: Date.now()
-            };
-            lastHandledCountdownId = countdownEvent.id;
-            runSynchronizedCountdown();
-            updateRoomInCloud({ lastCountdown: countdownEvent });
-        });
-
-        // Local Video File Selection
-        document.getElementById('localVideoFileInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
+        function loadLocalFile(event) {
+            const file = event.target.files[0];
             if (!file) return;
             const fileUrl = URL.createObjectURL(file);
-            activatePlayerContainer('local');
-            if (hlsInstance) {
-                hlsInstance.destroy();
-                hlsInstance = null;
-            }
-            html5Video.src = fileUrl;
-            localFileNameBadge.classList.remove('hidden');
-            nowPlayingTitle.textContent = file.name;
-            showToast(`Файл «${file.name}» готов к синхронному просмотру!`);
+            video.src = fileUrl;
+            video.load();
+            video.play();
+            addSystemMessage(`Загружен локальный файл: ${file.name}. Убедитесь, что у девушки выбран этот же файл!`);
+        }
 
-            broadcastPlayerAction({
-                sourceType: 'local',
-                url: 'local://' + file.name,
-                title: file.name,
-                currentTime: 0,
-                isPlaying: false
-            }, `выбрал(а) локальный видеофайл «${file.name}»`);
-        });
-
-        // Local Subtitles (.srt or .vtt) Loader
-        document.getElementById('localSubtitlesInput').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const text = await file.text();
-            let vttText = text;
-            if (file.name.endsWith('.srt')) {
-                vttText = 'WEBVTT\n\n' + text.replace(/(\d\d:\d\d:\d\d),(\d\d\d)/g, '$1.$2');
-            }
-            const blob = new Blob([vttText], { type: 'text/vtt' });
-            subtitleTrack.src = URL.createObjectURL(blob);
-            html5Video.textTracks[0].mode = 'showing';
-            showToast('Субтитры успешно подключены!');
-        });
-
-        // Force Sync Now Button
-        document.getElementById('forceSyncBtn').addEventListener('click', () => {
-            const currentTime = activeTab === 'youtube' && isYtReady && ytPlayer?.getCurrentTime
-                ? ytPlayer.getCurrentTime()
-                : html5Video.currentTime || 0;
-            const isPlaying = activeTab === 'youtube' && isYtReady && ytPlayer?.getPlayerState
-                ? ytPlayer.getPlayerState() === 1
-                : !html5Video.paused;
-
-            broadcastPlayerAction(
-                { currentTime, isPlaying },
-                `синхронизировал(а) зал на ${formatTimecode(currentTime)}`
-            );
-            showToast(`Комната синхронизирована на ${formatTimecode(currentTime)}`);
-        });
-
-        // Ambilight Toggle
-        const ambilightMoods = [
-            'from-rose-600/60 via-violet-600/50 to-amber-500/50',
-            'from-cyan-500/55 via-blue-600/50 to-purple-600/55',
-            'from-amber-500/60 via-orange-600/50 to-rose-600/55'
-        ];
-        let currentMoodIdx = 0;
-        document.getElementById('ambilightToggleBtn').addEventListener('click', () => {
-            if (!ambilightEnabled) {
-                ambilightEnabled = true;
-                currentMoodIdx = (currentMoodIdx + 1) % ambilightMoods.length;
-                ambilightAura.className = `ambilight-aura bg-gradient-to-tr ${ambilightMoods[currentMoodIdx]}`;
-                ambilightAura.style.opacity = '0.68';
-                showToast('Атмосферная подсветка Ambilight включена ✨');
-            } else {
-                ambilightEnabled = false;
-                ambilightAura.style.opacity = '0';
-                showToast('Подсветка Ambilight выключена');
-            }
-        });
-
-        // Theater Mode Toggle
-        document.getElementById('theaterModeBtn').addEventListener('click', () => {
-            document.body.classList.toggle('theater-active');
-            const isTheater = document.body.classList.contains('theater-active');
-            showToast(isTheater ? 'Режим кинотеатра включён 🍿' : 'Обычный режим');
-        });
-
-        // Toggle Sidebar
-        document.getElementById('toggleSidebarBtn').addEventListener('click', () => {
-            const sidebar = document.getElementById('sidebarColumn');
-            sidebar.classList.toggle('hidden');
-        });
-
-        // Sidebar Chat / Playlist Tabs
-        const sidebarTabChat = document.getElementById('sidebarTabChat');
-        const sidebarTabPlaylist = document.getElementById('sidebarTabPlaylist');
-        const chatPanel = document.getElementById('chatPanel');
-        const playlistPanel = document.getElementById('playlistPanel');
-
-        sidebarTabChat.addEventListener('click', () => {
-            chatPanel.classList.remove('hidden');
-            playlistPanel.classList.add('hidden');
-            sidebarTabChat.className = 'py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 bg-white/10 text-white shadow';
-            sidebarTabPlaylist.className = 'py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 text-gray-400 hover:text-white hover:bg-white/5';
-        });
-
-        sidebarTabPlaylist.addEventListener('click', () => {
-            playlistPanel.classList.remove('hidden');
-            chatPanel.classList.add('hidden');
-            sidebarTabPlaylist.className = 'py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 bg-white/10 text-white shadow';
-            sidebarTabChat.className = 'py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-2 text-gray-400 hover:text-white hover:bg-white/5';
-        });
-
-        // Chat Form Submission
-        document.getElementById('chatForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const input = document.getElementById('chatMessageInput');
+        // Чат
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
             const text = input.value.trim();
             if (!text) return;
+            appendMessage(text, 'me', myName);
+            publish({ type: 'chat', text: text });
             input.value = '';
-
-            const newMsg = {
-                id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-                senderId: myProfile.uid,
-                senderName: myProfile.name,
-                senderAvatar: myProfile.avatar,
-                text,
-                timestamp: Date.now(),
-                isSystem: false
-            };
-
-            const updatedMessages = [...(localRoomSnapshot.chatMessages || []).slice(-75), newMsg];
-            await updateRoomInCloud({ chatMessages: updatedMessages });
-        });
-
-        // Share Current Timecode in Chat
-        document.getElementById('shareTimecodeBtn').addEventListener('click', () => {
-            const currentSec = activeTab === 'youtube' && isYtReady && ytPlayer?.getCurrentTime
-                ? ytPlayer.getCurrentTime()
-                : html5Video.currentTime || 0;
-            const input = document.getElementById('chatMessageInput');
-            input.value = `${input.value} [Смотрю на ${formatTimecode(currentSec)}] `.trimStart();
-            input.focus();
-        });
-
-        // Add Item to Shared Playlist
-        document.getElementById('addPlaylistItemBtn').addEventListener('click', async () => {
-            const titleInput = document.getElementById('playlistTitleInput');
-            const urlInput = document.getElementById('playlistUrlInput');
-            const title = titleInput.value.trim() || 'Фильм / Серия';
-            const url = urlInput.value.trim();
-            if (!url) {
-                showToast('Укажите ссылку на видео для добавления в плейлист', 'fa-solid fa-circle-info text-amber-400');
-                return;
-            }
-
-            let detectedType = 'direct';
-            if (extractYouTubeId(url)) detectedType = 'youtube';
-            else if (url.startsWith('<iframe') || url.includes('vk.com/video_ext') || url.includes('kodik')) detectedType = 'embed';
-
-            const newItem = {
-                id: 'pl-' + Date.now(),
-                title,
-                url: extractIframeSrc(url),
-                sourceType: detectedType,
-                watched: false
-            };
-
-            titleInput.value = '';
-            urlInput.value = '';
-            const updatedPlaylist = [...(localRoomSnapshot.playlist || []), newItem];
-            await updateRoomInCloud({ playlist: updatedPlaylist });
-            showToast('Добавлено в общий плейлист!');
-        });
-
-        // Floating Emoji Reactions Click
-        document.querySelectorAll('.reaction-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const emoji = btn.getAttribute('data-reaction');
-                const reactionEvent = {
-                    id: 'react-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
-                    emoji,
-                    senderName: myProfile.name,
-                    timestamp: Date.now()
-                };
-                lastHandledReactionId = reactionEvent.id;
-                spawnFloatingEmoji(emoji, myProfile.name);
-                updateRoomInCloud({ lastReaction: reactionEvent });
-            });
-        });
-
-        // Send Couple Hug / Love Wave
-        document.getElementById('sendLoveWaveBtn').addEventListener('click', () => {
-            const loveEvent = {
-                id: 'love-' + Date.now(),
-                senderName: myProfile.name,
-                senderAvatar: myProfile.avatar,
-                timestamp: Date.now()
-            };
-            lastHandledLoveWaveId = loveEvent.id;
-            triggerLoveBannerAnimation(myProfile.name, myProfile.avatar);
-            updateRoomInCloud({ lastLoveWave: loveEvent });
-        });
-
-        // Copy Room Code
-        document.getElementById('copyRoomBtn').addEventListener('click', () => {
-            const tempInput = document.createElement('textarea');
-            tempInput.value = currentRoomId;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempInput);
-            showToast(`Код комнаты «${currentRoomId}» скопирован! Отправьте его второй половинке ❤️`);
-        });
-
-        // ==========================================
-        // 12. MODALS: PROFILE & ROOM SWITCHER
-        // ==========================================
-        const profileModal = document.getElementById('profileModal');
-        const avatarPickerGrid = document.getElementById('avatarPickerGrid');
-        let selectedAvatarTemp = myProfile.avatar;
-
-        function renderAvatarPicker() {
-            avatarPickerGrid.innerHTML = AVATAR_OPTIONS.map(av => `
-                <button type="button" data-avatar="${av}" class="h-11 rounded-xl text-xl flex items-center justify-center transition border ${
-                    av === selectedAvatarTemp
-                        ? 'bg-rose-500/30 border-rose-400 scale-105'
-                        : 'bg-velvet-900 border-white/10 hover:bg-white/10'
-                }">
-                    ${av}
-                </button>
-            `).join('');
-
-            avatarPickerGrid.querySelectorAll('[data-avatar]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    selectedAvatarTemp = btn.getAttribute('data-avatar');
-                    renderAvatarPicker();
-                });
-            });
         }
 
-        document.getElementById('openProfileBtn').addEventListener('click', () => {
-            document.getElementById('profileNameInput').value = myProfile.name;
-            document.getElementById('profileMoodInput').value = myProfile.mood;
-            selectedAvatarTemp = myProfile.avatar;
-            renderAvatarPicker();
-            profileModal.classList.remove('hidden');
-        });
-
-        document.getElementById('closeProfileModalBtn').addEventListener('click', () => {
-            profileModal.classList.add('hidden');
-        });
-
-        document.getElementById('saveProfileBtn').addEventListener('click', async () => {
-            const newName = document.getElementById('profileNameInput').value.trim() || 'Любимый зритель';
-            const newMood = document.getElementById('profileMoodInput').value;
-            myProfile.name = newName;
-            myProfile.avatar = selectedAvatarTemp;
-            myProfile.mood = newMood;
-
-            myAvatarHeader.textContent = myProfile.avatar;
-            myNameHeader.textContent = myProfile.name;
-            profileModal.classList.add('hidden');
-            showToast('Профиль обновлён!');
-
-            // Save to private Firestore profile document & update presence in room
-            if (isCloudConnected && currentUser && db) {
-                try {
-                    const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'main');
-                    await setDoc(profileRef, myProfile, { merge: true });
-                } catch (e) {}
-            }
-            await registerPresenceInRoom();
-        });
-
-        // Room Modal
-        const roomModal = document.getElementById('roomModal');
-        document.getElementById('changeRoomBtn').addEventListener('click', () => {
-            document.getElementById('roomCodeInput').value = currentRoomId;
-            roomModal.classList.remove('hidden');
-        });
-
-        document.getElementById('closeRoomModalBtn').addEventListener('click', () => {
-            roomModal.classList.add('hidden');
-        });
-
-        document.getElementById('generateRandomRoomBtn').addEventListener('click', () => {
-            const prefixes = ['LOVE', 'KISS', 'COZY', 'DUO', 'DATE'];
-            const p = prefixes[Math.floor(Math.random() * prefixes.length)];
-            const num = Math.floor(100 + Math.random() * 899);
-            document.getElementById('roomCodeInput').value = `${p}-${num}`;
-        });
-
-        document.getElementById('joinRoomConfirmBtn').addEventListener('click', async () => {
-            const rawCode = document.getElementById('roomCodeInput').value.trim().toUpperCase().replace(/[^A-ZА-Я0-9-_]/gi, '');
-            if (!rawCode) return;
-            roomModal.classList.add('hidden');
-            await joinRoom(rawCode);
-            showToast(`Вы вошли в комнату ${rawCode}`);
-        });
-
-        // ==========================================
-        // 13. ROOM SUBSCRIPTION & FIREBASE AUTH BOOTSTRAP
-        // ==========================================
-        async function registerPresenceInRoom() {
-            const updatedMembers = {
-                ...(localRoomSnapshot.members || {}),
-                [myProfile.uid]: {
-                    uid: myProfile.uid,
-                    name: myProfile.name,
-                    avatar: myProfile.avatar,
-                    mood: myProfile.mood,
-                    lastSeen: Date.now()
-                }
-            };
-            await updateRoomInCloud({ members: updatedMembers });
+        function appendMessage(text, type, sender) {
+            const el = document.createElement('div');
+            el.className = `msg ${type}`;
+            el.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            messageList.appendChild(el);
+            messageList.scrollTop = messageList.scrollHeight;
         }
 
-        async function joinRoom(roomCode) {
-            currentRoomId = roomCode;
-            activeRoomCodeDisplay.textContent = currentRoomId;
-
-            if (roomUnsubscribe) {
-                roomUnsubscribe();
-                roomUnsubscribe = null;
-            }
-
-            if (!isCloudConnected || !currentUser || !db) {
-                localRoomSnapshot = getDefaultRoomData();
-                applyRoomSnapshotToUI(localRoomSnapshot);
-                return;
-            }
-
-            try {
-                const roomRef = getRoomDocRef(currentRoomId);
-                const snap = await getDoc(roomRef);
-                if (!snap.exists()) {
-                    const initialData = getDefaultRoomData();
-                    initialData.members[myProfile.uid] = {
-                        uid: myProfile.uid,
-                        name: myProfile.name,
-                        avatar: myProfile.avatar,
-                        mood: myProfile.mood,
-                        lastSeen: Date.now()
-                    };
-                    await setDoc(roomRef, initialData);
-                } else {
-                    await registerPresenceInRoom();
-                }
-
-                // Listen for real-time updates (with mandatory error callback)
-                roomUnsubscribe = onSnapshot(
-                    roomRef,
-                    (docSnap) => {
-                        if (docSnap.exists()) {
-                            applyRoomSnapshotToUI(docSnap.data());
-                        }
-                    },
-                    (error) => {
-                        console.error('Ошибка подписки на комнату:', error);
-                    }
-                );
-            } catch (err) {
-                console.error('Ошибка входа в комнату:', err);
-            }
+        function addSystemMessage(text) {
+            const el = document.createElement('div');
+            el.className = 'msg system';
+            el.textContent = text;
+            messageList.appendChild(el);
+            messageList.scrollTop = messageList.scrollHeight;
         }
 
-        // Listen to BroadcastChannel for local multi-tab sync fallback
-        localChannel.onmessage = (ev) => {
-            if (ev.data && ev.data.type === 'ROOM_UPDATE' && ev.data.roomId === currentRoomId) {
-                applyRoomSnapshotToUI(ev.data.data);
-            }
-        };
-
-        async function bootstrapApp() {
-            // Update header with initial profile
-            myAvatarHeader.textContent = myProfile.avatar;
-            myNameHeader.textContent = myProfile.name;
-
-            // Load initial demo movie into player UI
-            loadDirectOrHlsMedia(
-                localRoomSnapshot.playerState.url,
-                localRoomSnapshot.playerState.title
-            );
-            applyRoomSnapshotToUI(localRoomSnapshot);
-
-            // Initialize Firebase if __firebase_config is provided by environment
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                try {
-                    const firebaseConfig = JSON.parse(__firebase_config);
-                    const app = initializeApp(firebaseConfig);
-                    auth = getAuth(app);
-                    db = getFirestore(app);
-
-                    // RULE 3: Authenticate FIRST before any Firestore query
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-
-                    currentUser = auth.currentUser;
-                    if (currentUser) {
-                        isCloudConnected = true;
-                        myProfile.uid = currentUser.uid;
-
-                        // Check if user already saved a profile in their private path
-                        const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'main');
-                        const profSnap = await getDoc(profileRef);
-                        if (profSnap.exists()) {
-                            myProfile = { ...myProfile, ...profSnap.data(), uid: currentUser.uid };
-                            myAvatarHeader.textContent = myProfile.avatar;
-                            myNameHeader.textContent = myProfile.name;
-                        }
-
-                        await joinRoom(currentRoomId);
-                    }
-                } catch (err) {
-                    console.warn('Работа в локальном режиме синхронизации вкладок:', err);
-                }
-            }
+        // Реакции и анимации
+        function sendReaction(emoji) {
+            renderFlyingEmoji(emoji);
+            publish({ type: 'reaction', emoji: emoji });
         }
 
-        window.addEventListener('DOMContentLoaded', bootstrapApp);
+        function renderFlyingEmoji(emoji) {
+            const el = document.createElement('div');
+            el.className = 'flying-emoji';
+            el.textContent = emoji;
+            el.style.left = Math.floor(Math.random() * 60 + 20) + '%';
+            document.getElementById('screenBox').appendChild(el);
+            setTimeout(() => el.remove(), 2500);
+        }
+
+        function sendHug() {
+            showHugAnimation('Вы');
+            publish({ type: 'hug' });
+        }
+
+        function showHugAnimation(sender) {
+            const overlay = document.getElementById('hugOverlay');
+            document.getElementById('hugSenderText').textContent = sender === 'Вы' ? 'Вы отправили объятие ❤️' : `${sender} крепко обнимает вас 🥰`;
+            overlay.classList.add('active');
+            setTimeout(() => overlay.classList.remove('active'), 3000);
+        }
+
+        // Управление комнатой
+        function changeRoom() {
+            const val = document.getElementById('roomInput').value.trim().toUpperCase();
+            if (!val || val === currentRoom) return;
+            currentRoom = val;
+            window.history.pushState({}, '', `?room=${currentRoom}`);
+            initSync();
+            addSystemMessage(`Вы перешли в комнату ${currentRoom}`);
+        }
+
+        function copyInviteLink() {
+            const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}&role=girl`;
+            navigator.clipboard.writeText(inviteUrl);
+            alert(`Ссылка скопирована!\n\nОтправьте её девушке:\n${inviteUrl}`);
+        }
+
+        function formatTime(sec) {
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        // Запуск
+        initSync();
     </script>
 </body>
 </html>
